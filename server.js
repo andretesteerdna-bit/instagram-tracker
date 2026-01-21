@@ -297,7 +297,7 @@ app.post('/api/save-gps', async (req, res) => {
         lat: gps.latitude,
         lng: gps.longitude,
         accuracy: gps.accuracy
-      };
+      });
       
       // ... resto do código de geolocalização ...
 // ROTA 4: API Stats
