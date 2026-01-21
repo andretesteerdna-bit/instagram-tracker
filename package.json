@@ -1,0 +1,16 @@
+{
+  "name": "instagram-click-tracker",
+  "version": "1.0.0",
+  "description": "Sistema de rastreamento de cliques do Instagram",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "view": "node view-clicks.js"
+  },
+  "keywords": ["instagram", "tracker", "analytics"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

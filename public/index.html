@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rastreador de Cliques</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 { color: #667eea; margin-bottom: 10px; }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .stat-number { font-size: 2.5em; font-weight: bold; color: #667eea; }
+        .stat-label { color: #666; margin-top: 5px; }
+        .clicks-container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .click-item {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+        }
+        .click-time { font-weight: bold; color: #667eea; margin-bottom: 5px; }
+        .click-info { color: #666; font-size: 0.9em; margin: 3px 0; }
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-bottom: 20px;
+        }
+        .refresh-btn:hover { background: #5568d3; }
+        .link-box {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            border: 2px dashed #667eea;
+        }
+        .link-box code {
+            background: white;
+            padding: 8px 15px;
+            border-radius: 5px;
+            display: inline-block;
+            color: #667eea;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Dashboard de Rastreamento</h1>
+            <p>Monitore quem clica no seu link do Instagram</p>
+            <div class="link-box">
+                <strong>🔗 Seu link de rastreamento:</strong><br>
+                <code id="trackingLink">Carregando...</code>
+            </div>
+        </div>
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number" id="totalClicks">0</div>
+                <div class="stat-label">Total de Cliques</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="todayClicks">0</div>
+                <div class="stat-label">Cliques Hoje</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="uniqueVisitors">0</div>
+                <div class="stat-label">Visitantes Únicos</div>
+            </div>
+        </div>
+        <div class="clicks-container">
+            <button class="refresh-btn" onclick="loadClicks()">🔄 Atualizar</button>
+            <h2>Últimos Cliques</h2>
+            <div id="clicksList">Carregando...</div>
+        </div>
+    </div>
+    <script>
+        const trackingUrl = window.location.origin + '/track';
+        document.getElementById('trackingLink').textContent = trackingUrl;
+
+        async function loadClicks() {
+            const response = await fetch('/api/clicks');
+            const clicks = await response.json();
+            document.getElementById('totalClicks').textContent = clicks.length;
+            const today = new Date().toDateString();
+            const todayClicks = clicks.filter(c => new Date(c.timestamp).toDateString() === today);
+            document.getElementById('todayClicks').textContent = todayClicks.length;
+            const uniqueIPs = new Set(clicks.map(c => c.ip));
+            document.getElementById('uniqueVisitors').textContent = uniqueIPs.size;
+            
+            const container = document.getElementById('clicksList');
+            if (clicks.length === 0) {
+                container.innerHTML = '<p>📭 Nenhum clique ainda</p>';
+                return;
+            }
+            container.innerHTML = clicks.reverse().map(c => {
+                const date = new Date(c.timestamp).toLocaleString('pt-BR');
+                const isIG = c.userAgent.toLowerCase().includes('instagram');
+                return `<div class="click-item">
+                    <div class="click-time">⏰ ${date}</div>
+                    <div class="click-info">🌐 IP: ${c.ip}</div>
+                    <div class="click-info">🔗 Origem: ${c.referer}</div>
+                    ${isIG ? '<div class="click-info">✅ Do Instagram!</div>' : ''}
+                </div>`;
+            }).join('');
+        }
+        loadClicks();
+        setInterval(loadClicks, 10000);
+    </script>
+</body>
+</html>
