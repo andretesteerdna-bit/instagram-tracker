@@ -1,4 +1,13 @@
-app.get('/', (req, res) => {
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 10000;
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+const clicks = [];
+const gpsData = [];
+  app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html lang="pt-BR">
@@ -270,4 +279,10 @@ app.get('/', (req, res) => {
     </body>
     </html>
   `);
+});
+// Inicia o servidor
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Servidor rodando na porta ${PORT}`);
+  console.log(`📊 Dashboard disponível`);
+  console.log(`🔗 Link de rastreamento: /track`);
 });
