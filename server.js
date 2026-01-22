@@ -260,7 +260,7 @@ app.get('/track', async (req, res) => {
           if (redirected) return;
           redirected = true;
           document.getElementById('status').textContent = 'Redirecionando...';
-          window.location.href = 'https://bit.ly/sobre-andre';
+          window.location.href = 'https://www.instagram.com/andre.osantos12/';
         }
         
         console.log('🔍 Click ID:', clickId);
