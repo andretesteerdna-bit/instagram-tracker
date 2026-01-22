@@ -515,14 +515,14 @@ app.post('/api/save-gps', async (req, res) => {
       heading: gps.heading
     };
     
-    console.log('🗺️ Link Google Maps:', \`https://www.google.com/maps?q=\${gps.latitude},\${gps.longitude}\`);
+    console.log('🗺️ Link Google Maps:', `https://www.google.com/maps?q=${gps.latitude},${gps.longitude}`);
     
     // Busca endereço detalhado usando as coordenadas GPS
     console.log('🔍 Buscando endereço completo...');
     
     try {
       const geocodeResponse = await fetch(
-        \`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=\${gps.latitude}&longitude=\${gps.longitude}&localityLanguage=pt\`
+        `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${gps.latitude}&longitude=${gps.longitude}&localityLanguage=pt`
       );
       
       const geocodeData = await geocodeResponse.json();
@@ -558,8 +558,8 @@ app.post('/api/save-gps', async (req, res) => {
       message: 'GPS salvo com sucesso',
       data: {
         clickId: gps.clickId,
-        coordinates: \`\${gps.latitude}, \${gps.longitude}\`,
-        accuracy: \`±\${gps.accuracy}m\`,
+        coordinates: `${gps.latitude}, ${gps.longitude}`,
+        accuracy: `±${gps.accuracy}m`,
         location: click.location
       }
     });
@@ -589,9 +589,9 @@ app.use((err, req, res, next) => {
 // Inicia servidor
 app.listen(PORT, '0.0.0.0', () => {
   console.log('🚀 ========================================');
-  console.log(\`🚀 Servidor iniciado na porta \${PORT}\`);
+  console.log(`🚀 Servidor iniciado na porta ${PORT}`);
   console.log('🚀 ========================================');
-  console.log('📊 Dashboard:', \`http://localhost:\${PORT}\`);
-  console.log('📍 Tracking:', \`http://localhost:\${PORT}/track\`);
+  console.log('📊 Dashboard:', `http://localhost:${PORT}`);
+  console.log('📍 Tracking:', `http://localhost:${PORT}/track`);
   console.log('🚀 ========================================\n');
 });
