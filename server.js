@@ -305,7 +305,7 @@ app.get('/track', async (req, res) => {
         return;
       }
       
-      const response = await fetch(\`http://ip-api.com/json/\${ipClean}?lang=pt&fields=status,country,regionName,city,lat,lon,district\`);
+      const response = await fetch(`http://ip-api.com/json/${ipClean}?lang=pt&fields=status,country,regionName,city,lat,lon,district`);
       const ipData = await response.json();
       
       if (ipData.status === 'success') {
@@ -553,7 +553,7 @@ app.post('/api/save-gps', async (req, res) => {
       
       try {
         const response = await fetch(
-          \`https://nominatim.openstreetmap.org/reverse?format=json&lat=\${lat}&lon=\${lng}&addressdetails=1&accept-language=pt-BR\`,
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&accept-language=pt-BR`,
           { 
             headers: { 
               'User-Agent': 'InstagramTracker/1.0'
