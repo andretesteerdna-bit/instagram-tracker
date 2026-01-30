@@ -1,7 +1,7 @@
 {
-  "name": "instagram-tracker",
-  "version": "1.0.0",
-  "description": "Rastreador de cliques com localização GPS e IP",
+  "name": "rastreador-localizacao",
+  "version": "2.0.0",
+  "description": "Rastreador simples de localização por IP",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
